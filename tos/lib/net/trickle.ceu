@@ -1,0 +1,80 @@
+C _TrickleTimerImplP__0__Random__rand16();
+C do
+    u16 Random__rand16(void);
+end
+C constant _TRICKLE_TAU_H, _TRICKLE_TAU_L, _TRICKLE_K;
+
+output int TRICKLE_FIRED;
+input  void TRICKLE_INIT;
+input  int  TRICKLE_START;
+input  int  TRICKLE_STOP;
+input  int  TRICKLE_RESET;
+input  int  TRICKLE_INC;
+
+class Trickle with
+    event void go_start;
+    event void go_stop;
+    event void go_reset;
+    event void go_inc;
+    var u8 id;
+do
+    var u16 tau = _TRICKLE_TAU_H;
+
+    loop do
+        var u8  c = 0;  // counter
+        var u16 t;      // timer                // TODO
+
+
+        t = (tau/2) + _TrickleTimerImplP__0__Random__rand16() % (tau/2);
+
+        await go_start;
+
+        par/or do
+            await (tau) ms;
+            tau = tau * 2;
+            if tau > _TRICKLE_TAU_H then
+                tau = _TRICKLE_TAU_H;
+            end
+        with
+            await this.go_reset;
+            tau = _TRICKLE_TAU_L;
+        with
+            loop do
+                await this.go_inc;
+                c = c + 1;
+            end
+        with
+            await (t)ms;
+            if c < _TRICKLE_K then
+                emit TRICKLE_FIRED(this.id);
+            end
+            await FOREVER;
+        end
+    end
+end
+
+await TRICKLE_INIT;
+
+var Trickle[2] trickles;        // TODO
+
+par do
+    loop do
+        var u8 i = await TRICKLE_START;
+        emit trickles[i].go_start;
+    end
+with
+    loop do
+        var u8 i = await TRICKLE_STOP;
+        emit trickles[i].go_stop;
+    end
+with
+    loop do
+        var u8 i = await TRICKLE_RESET;
+        emit trickles[i].go_reset;
+    end
+with
+    loop do
+        var u8 i = await TRICKLE_INC;
+        emit trickles[i].go_inc;
+    end
+end

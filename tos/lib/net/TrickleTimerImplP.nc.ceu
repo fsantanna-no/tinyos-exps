@@ -1,0 +1,72 @@
+#include <Timer.h>
+
+generic module TrickleTimerImplP(uint16_t low,
+				 uint16_t high,
+				 uint8_t k,
+				 uint8_t count,
+				 uint8_t scale) {
+  provides {
+    interface Init;
+    interface TrickleTimer[uint8_t id];
+  }
+  uses {
+    interface Timer<TMilli>;
+    interface BitVector as Pending;
+    interface BitVector as Changed;
+    interface Random;
+    interface Leds;
+  }
+}
+
+implementation
+{
+    #define TRICKLE_TAU_L low
+    #define TRICKLE_TAU_H high
+    #define TRICKLE_K     k
+    #define TRICKLE_COUNT count
+
+    #define ceu_out_wclock(us) \
+        call Timer.startOneShot(us/1000)
+
+    #define ceu_out_event_TRICKLE_FIRED(i) \
+        signal TrickleTimer.fired[*i]();
+
+typedef int64_t  s64;
+typedef uint64_t u64;
+typedef int32_t  s32;
+typedef uint32_t u32;
+typedef int16_t  s16;
+typedef uint16_t u16;
+typedef int8_t    s8;
+typedef uint8_t   u8;
+
+    #include "_ceu_code.cceu"
+
+    command error_t Init.init() {
+        ceu_go_event(IN_TRICKLE_INIT, NULL);
+    }
+
+    command error_t TrickleTimer.start[uint8_t id]() {
+        ceu_go_event(IN_TRICKLE_START, &id);
+    }
+
+    command void TrickleTimer.stop[uint8_t id]() {
+        ceu_go_event(IN_TRICKLE_STOP, &id);
+    }
+
+    command void TrickleTimer.reset[uint8_t id]() {
+        ceu_go_event(IN_TRICKLE_RESET, &id);
+    }
+
+    command void TrickleTimer.incrementCounter[uint8_t id]() {
+        ceu_go_event(IN_TRICKLE_INC, &id);
+    }
+
+    default event void TrickleTimer.fired[uint8_t id]() {
+        return;
+    }
+
+    event void Timer.fired() {
+        ceu_go_wclock(call Timer.getdt());
+    }
+}
