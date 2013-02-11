@@ -1,32 +1,17 @@
-C _Random__rand16();
-C do
-    u16 Random__rand16(void);
-end
-C constant _TRICKLE_TAU_H, _TRICKLE_TAU_L, _TRICKLE_K, _TRICKLE_SCALE;
-
-output int  TRICKLE_FIRED;
-input  void TRICKLE_INIT;
-input  int  TRICKLE_START;
-input  int  TRICKLE_STOP;
-input  int  TRICKLE_RESET;
-input  int  TRICKLE_INC;
-
 @define(AWAIT, `
-loop do
-    id_ = await $1;
-    if id_ == this.id then
-        break;
+    loop do
+        id_ = await $1;
+        if id_ == this.id then
+            break;
+        end
     end
-end
 ')
-
 class Trickle with
     var u8 id;
 do
     var u8 id_;
     loop do
         var u16 tau = _TRICKLE_TAU_H;
-
         par/or do
             loop do
                 AWAIT(TRICKLE_RESET);
@@ -40,7 +25,6 @@ do
             with
                 loop do
                     var u8 count = 0;
-
                     par/or do
                         await (tau << (_TRICKLE_SCALE-1)) ms;
                         tau = tau * 2;
@@ -55,9 +39,8 @@ do
                             count = count + 1;
                         end
                     with
-                        //var u16 dt = (tau/2) + _Random__rand16() % (tau/2);
-                        //await (dt << (_TRICKLE_SCALE-1)) ms;
-                        await ((tau/2) + 1) ms;
+                        var u16 dt = (tau/2) + _Random__rand16() % (tau/2);
+                        await (dt << (_TRICKLE_SCALE-1)) ms;
                         if count < _TRICKLE_K then
                             emit TRICKLE_FIRED(this.id);
                         end
@@ -68,10 +51,8 @@ do
         end
     end
 end
-
 await TRICKLE_INIT;
-
-var Trickle[4] trickles;        // TODO: 4
+var Trickle[4] trickles;
 loop i, 4 do
     trickles[i].id = i;
 end

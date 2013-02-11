@@ -24,6 +24,7 @@ implementation
     #define TRICKLE_TAU_H high
     #define TRICKLE_K     k
     #define TRICKLE_COUNT count
+    #define TRICKLE_SCALE scale
 
     #define ceu_out_wclock(us) \
         call Timer.startOneShot(us/1000)
@@ -40,14 +41,18 @@ typedef uint16_t u16;
 typedef int8_t    s8;
 typedef uint8_t   u8;
 
+    #include "_ceu_defs.h"
     #include "_ceu_code.cceu"
 
     command error_t Init.init() {
+        ceu_go_init();
         ceu_go_event(IN_TRICKLE_INIT, NULL);
+        return SUCCESS;
     }
 
     command error_t TrickleTimer.start[uint8_t id]() {
         ceu_go_event(IN_TRICKLE_START, &id);
+        return SUCCESS; // TODO: EBUSY
     }
 
     command void TrickleTimer.stop[uint8_t id]() {
@@ -67,6 +72,6 @@ typedef uint8_t   u8;
     }
 
     event void Timer.fired() {
-        ceu_go_wclock(call Timer.getdt());
+        ceu_go_wclock(call Timer.getdt()*1000);
     }
 }
