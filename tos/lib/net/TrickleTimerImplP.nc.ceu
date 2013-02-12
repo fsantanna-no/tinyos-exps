@@ -20,11 +20,20 @@ generic module TrickleTimerImplP(uint16_t low,
 
 implementation
 {
-    #define TRICKLE_TAU_L low
-    #define TRICKLE_TAU_H high
+    typedef int64_t  s64;
+    typedef uint64_t u64;
+    typedef int32_t  s32;
+    typedef uint32_t u32;
+    typedef int16_t  s16;
+    typedef uint16_t u16;
+    typedef int8_t    s8;
+    typedef uint8_t   u8;
+
+    #define TRICKLE_TAU_L (low*1000)
+    #define TRICKLE_TAU_H (high*1000)
     #define TRICKLE_K     k
     #define TRICKLE_COUNT count
-    #define TRICKLE_SCALE scale
+    #define TRICKLE_SCALE 1 //scale=10?
 
     #define ceu_out_wclock(us) \
         call Timer.startOneShot(us/1000)
@@ -32,14 +41,8 @@ implementation
     #define ceu_out_event_TRICKLE_FIRED(i) \
         signal TrickleTimer.fired[*i]();
 
-typedef int64_t  s64;
-typedef uint64_t u64;
-typedef int32_t  s32;
-typedef uint32_t u32;
-typedef int16_t  s16;
-typedef uint16_t u16;
-typedef int8_t    s8;
-typedef uint8_t   u8;
+    #define Random_rand16() \
+        call Random.rand16()
 
     #include "_ceu_defs.h"
     #include "_ceu_code.cceu"
