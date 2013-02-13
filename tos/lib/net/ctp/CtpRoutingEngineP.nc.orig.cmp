@@ -1,0 +1,136 @@
+    bool radioOn = FALSE;
+    bool running = FALSE;
+    bool sending = FALSE;
+    route_info_t routeInfo;
+    bool state_is_root;
+    message_t beaconMsgBuffer;
+    ctp_routing_header_t* beaconMsg;
+    uint32_t currentInterval = minInterval;
+    uint32_t t; 
+    bool tHasPassed;
+    void chooseAdvertiseTime() {
+       t = currentInterval;
+       t /= 2;
+       t += call Random.rand32() % t;
+       tHasPassed = FALSE;
+       call BeaconTimer.startOneShot(t);
+    }
+    void resetInterval() {
+      currentInterval = minInterval;
+      chooseAdvertiseTime();
+    }
+    void decayInterval() {
+        currentInterval *= 2;
+        if (currentInterval > maxInterval) {
+          currentInterval = maxInterval;
+        }
+      chooseAdvertiseTime();
+    }
+    void remainingInterval() {
+       uint32_t remaining = currentInterval;
+       remaining -= t;
+       tHasPassed = TRUE;
+       call BeaconTimer.startOneShot(remaining);
+    }
+    command error_t Init.init() {
+        uint8_t maxLength;
+        radioOn = FALSE;
+        running = FALSE;
+        state_is_root = 0;
+        routeInfoInit(&routeInfo);
+        routingTableInit();
+    }
+    command error_t StdControl.start() {
+      if (!running) {
+	running = TRUE;
+	resetInterval();
+	call RouteTimer.startPeriodic(BEACON_INTERVAL);
+      }     
+    }
+    command error_t StdControl.stop() {
+        running = FALSE;
+    } 
+    event void RadioControl.startDone(error_t error) {
+        radioOn = TRUE;
+        if (running) {
+            uint16_t nextInt;
+            nextInt = call Random.rand16() % BEACON_INTERVAL;
+            nextInt += BEACON_INTERVAL >> 1;
+        }
+    } 
+    event void RadioControl.stopDone(error_t error) {
+        radioOn = FALSE;
+    }
+    task void sendBeaconTask() {
+        error_t eval;
+        if (sending) {
+            return;
+        }
+        beaconMsg->options = 0;
+        if (call CtpCongestion.isCongested()) {
+            beaconMsg->options |= CTP_OPT_ECN;
+        }
+        beaconMsg->parent = routeInfo.parent;
+        if (state_is_root) {
+            beaconMsg->etx = routeInfo.etx;
+        }
+        else if (routeInfo.parent == INVALID_ADDR) {
+            beaconMsg->etx = routeInfo.etx;
+            beaconMsg->options |= CTP_OPT_PULL;
+        } else {
+            beaconMsg->etx = routeInfo.etx + call LinkEstimator.getLinkQuality(routeInfo.parent);
+        }
+        call CollectionDebug.logEventRoute(NET_C_TREE_SENT_BEACON, beaconMsg->parent, 0, beaconMsg->etx);
+        eval = call BeaconSend.send(AM_BROADCAST_ADDR, 
+                                    &beaconMsgBuffer, 
+                                    sizeof(ctp_routing_header_t));
+        if (eval == SUCCESS) {
+            sending = TRUE;
+        } else if (eval == EOFF) {
+            radioOn = FALSE;
+        }
+    }
+    event void BeaconSend.sendDone(message_t* msg, error_t error) {
+        sending = FALSE;
+    }
+    event void RouteTimer.fired() {
+      if (radioOn && running) {
+         post updateRouteTask();
+      }
+    }
+    event void BeaconTimer.fired() {
+      if (radioOn && running) {
+        if (!tHasPassed) {
+          post updateRouteTask(); //always send the most up to date info
+          post sendBeaconTask();
+          remainingInterval();
+        }
+        else {
+          decayInterval();
+        }
+      }
+    }
+    event message_t* BeaconReceive.receive(message_t* msg, void* payload, uint8_t len) {
+        am_addr_t from;
+        ctp_routing_header_t* rcvBeacon;
+        bool congested;
+        if (len != sizeof(ctp_routing_header_t)) {
+          return msg;
+        }
+        from = call AMPacket.source(msg);
+        rcvBeacon = (ctp_routing_header_t*)payload;
+        congested = call CtpRoutingPacket.getOption(msg, CTP_OPT_ECN);
+        if (rcvBeacon->parent != INVALID_ADDR) {
+            if (rcvBeacon->etx == 0) {
+                call LinkEstimator.insertNeighbor(from);
+                call LinkEstimator.pinNeighbor(from);
+            }
+            routingTableUpdateEntry(from, rcvBeacon->parent, rcvBeacon->etx);
+            call CtpInfo.setNeighborCongested(from, congested);
+        }
+        if (call CtpRoutingPacket.getOption(msg, CTP_OPT_PULL)) {
+              resetInterval();
+        }
+        return msg;
+    }
+} 

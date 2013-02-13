@@ -4,7 +4,6 @@ C _Random_rand16();
 C constant _TRICKLE_TAU_H, _TRICKLE_TAU_L, _TRICKLE_K, _TRICKLE_SCALE;
 
 output int  TRICKLE_FIRED;
-input  void TRICKLE_INIT;
 input  int  TRICKLE_START;
 input  int  TRICKLE_STOP;
 input  int  TRICKLE_RESET;
@@ -61,8 +60,6 @@ do
         end
     end
 end
-
-await TRICKLE_INIT;
 
 var Trickle[NUM_TRICKLES] trickles;
 loop i, NUM_TRICKLES do

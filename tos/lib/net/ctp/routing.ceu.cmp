@@ -1,0 +1,115 @@
+event void go_start;
+event void go_stop;
+event void go_reset;
+glb_root? = 0;
+_routeInfoInit(&glb_route);
+_routingTableInit();
+par do
+    loop do
+        await go_start;
+        var u32 currentInterval = _CTP_ROUTE_MIN_INTERVAL;
+        par/or do
+            await go_stop;
+        with
+            loop do
+                await (_BEACON_INTERVAL) ms;    // RouteTimer
+                //post updateRouteTask();
+            end
+        with
+            loop do
+                par/or do
+                    par/or do
+                        await go_reset;
+                    with
+                        await CTP_ROUTE_UPDATE;
+                    with
+                        await CTP_ROUTE_IMMEDIATE_UPDATE;
+                    end
+                    currentInterval = _CTP_ROUTE_MIN_INTERVAL;
+                with
+                    var u32 t = currentInterval;
+                    t = t / 2;
+                    t = t + _Random_rand32()%t;
+                    await (t) ms;                   // BeaconTimer
+                    par/and do
+                        await (currentInterval-t) ms;   // TODO: subtrair late?
+                    with
+                        var _message_t             msg;
+                        var _ctp_routing_header_t* pay;
+                        pay = _BeaconSend_getPayload(&msg, _BeaconSend_maxPayloadLength());
+                        pay:options = 0;
+                        if _CtpCongestion_isCongested() then
+                            pay:options = pay:options | _CTP_OPT_ECN;
+                        end
+                        pay:parent = glb_route.parent;
+                        if glb_root? then
+                            pay:etx = glb_route.etx;
+                        else/if glb_route.parent == _INVALID_ADDR then
+                            pay:etx = glb_route.etx;
+                            pay:options = pay:options | _CTP_OPT_PULL;
+                        else
+                            pay:etx = glb_route.etx +
+                                        _LinkEstimator_getLinkQuality(glb_route.parent);
+                        end
+                        var u8 eval = _BeaconSend_send(_AM_BROADCAST_ADDR, 
+                                                        &msg, 
+                                                        sizeof<_ctp_routing_header_t>);
+                        if eval == _SUCCESS then
+                            await CTP_ROUTE_RADIO_SENDDONE;
+                        else/if eval == _EOFF then
+                            emit go_stop;
+                        end
+                    end
+                    currentInterval = currentInterval * 2;
+                    if currentInterval > _CTP_ROUTE_MAX_INTERVAL then
+                        currentInterval = _CTP_ROUTE_MAX_INTERVAL;
+                    end
+                end
+            end
+        end
+    end
+with
+    var s8 ctp?   = 0;  // TODO: unify both events?
+    var s8 radio? = 0;  // TODO: unify both events?
+    loop do
+        par/or do
+            await CTP_ROUTE_START;
+            ctp? = 1;
+        with
+            await CTP_ROUTE_STOP;
+            ctp? = 0;
+        with
+            await CTP_ROUTE_RADIO_STARTDONE;
+            radio? = 1;
+        with
+            await CTP_ROUTE_RADIO_STOPDONE;
+            radio? = 0;
+        end
+        if ctp? and radio? then
+            emit go_start;
+        else
+            emit go_stop;
+        end
+    end
+with
+    loop do
+        var _message_t* msg = await CTP_ROUTE_RADIO_RECEIVE;
+        //if _BeaconSend_payloadLength(msg) == sizeof<_ctp_routing_header_t> then
+            var _am_addr_t from = _AMPacket_source(msg);
+            var _ctp_routing_header_t* pay = <_ctp_routing_header_t*>
+                _BeaconSend_getPayload(msg, sizeof<_ctp_routing_header_t>);
+            var s8 congested? = _CtpRoutingPacket_getOption(msg, _CTP_OPT_ECN);
+            if pay:parent != _INVALID_ADDR then
+                if pay:etx == 0 then
+                    _LinkEstimator_insertNeighbor(from);
+                    _LinkEstimator_pinNeighbor(from);
+                end
+                _routingTableUpdateEntry(from, pay:parent, pay:etx);
+                _CtpInfo_setNeighborCongested(from, congested?);
+            end
+            if _CtpRoutingPacket_getOption(msg, _CTP_OPT_PULL) then
+                emit go_reset;
+            end
+        //end
+    end
+end

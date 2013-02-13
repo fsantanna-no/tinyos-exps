@@ -1,0 +1,221 @@
+C _am_addr_t = 2;
+C _message_t = 52;
+C _ctp_routing_header_t = sizeof<u8,u16,u16>; // TODO
+C _route_info_t = sizeof<u16,u16,s8,s8>; // TODO
+C _glb_state_is_root;
+C _glb_routeInfo;
+
+C constant _BEACON_INTERVAL,
+           _CTP_ROUTE_MIN_INTERVAL, _CTP_ROUTE_MAX_INTERVAL,
+           _INVALID_ADDR,
+           _AM_BROADCAST_ADDR,
+           _SUCCESS, _EOFF,
+           _CTP_OPT_ECN, _CTP_OPT_PULL;
+
+C pure _AMPacket_address(),
+       _AMPacket_source(),
+       _CtpRoutingPacket_getOption(),
+       _BeaconSend_send(),
+       _BeaconSend_getPayload(),
+       //_BeaconSend_payloadLength(),
+       _BeaconSend_maxPayloadLength();
+
+C nohold _Random_rand32(),
+         _LinkEstimator_getLinkQuality(),
+         _CtpCongestion_isCongested(),
+         _LinkEstimator_insertNeighbor(),
+         _LinkEstimator_pinNeighbor(),
+         _routingTableUpdateEntry(),
+         _CtpInfo_setNeighborCongested(),
+         _task_updateRouteTask(),
+         _routeInfoInit(),
+         _routingTableInit();
+
+ /*
+ * STATE-VARIABLES not required in Céu implementation:
+ *
+ * bool running:
+ *  - TRUE  on StdControl.start
+ *  - FALSE on StdControl.stop
+ * Disables all functionality in the protocol, i.e., callbacks are protected
+ * w/ "if (!running) return;".
+ * In Céu implementation, CTP_ROUTE_STOP kills all trails and the protocol
+ * awaits next CTP_ROUTE_START.
+
+ * bool radioOn:
+
+ * tHasPassed:
+ * economia de um timer
+ * mas tb pq o novo teria que estar sincronizado com o original
+ * problemas de precisao
+
+ * sending, split-phase, ceu is a sequence
+Linha de argumento:
+Trickle é o melhor caso: 100% controle.
+Esperamos que nas partes control-intensive, a implementação em Céu esteja
+toda localizada e use 40% das linha originais.
+Em um programa maior, também existe a parte sequencial convencional onde não
+haverá ganhos.
+Por isso, no fim ficamos com os 80%.
+Mesmo assim, essas partes em geral não possuem bug, e tanto faz o # de linhas.
+Entretanto, nas partes complicadas o ganho é muito grande, e a possibilidadede
+de bugs diminui.
+
+Mostrar as globais usadas como controle, as que são usadas dentro de controle,
+e ai globais de "banco de dados".
+
+ */
+
+// TODO: analise de numero de IFs e GLBs
+
+input void CTP_ROUTE_START;
+input void CTP_ROUTE_STOP;
+input void CTP_ROUTE_UPDATE;
+input void CTP_ROUTE_IMMEDIATE_UPDATE;
+input void CTP_ROUTE_RADIO_STARTDONE;
+input void CTP_ROUTE_RADIO_STOPDONE;
+input void CTP_ROUTE_RADIO_SENDDONE;
+input _message_t* CTP_ROUTE_RADIO_RECEIVE;
+
+event void go_start;
+event void go_stop;
+event void go_reset;
+
+_glb_state_is_root = 0;
+_routeInfoInit(&_glb_routeInfo);
+_routingTableInit();
+
+C nohold _dbg();   // TODO: remove
+_dbg("TreeRouting", "%d %d %d\n", sizeof<_ctp_routing_header_t >, sizeof<_route_info_t >);
+
+par do
+    loop do
+        await go_start;
+
+// start
+        var u32 currentInterval = _CTP_ROUTE_MIN_INTERVAL;
+
+        par/or do
+            await go_stop;
+        with
+            loop do
+                await (_BEACON_INTERVAL) ms;    // RouteTimer
+                _task_updateRouteTask();
+            end
+        with
+            loop do
+                par/or do
+                    par/or do
+                        await go_reset;
+                    with
+                        await CTP_ROUTE_UPDATE;
+                    with
+                        await CTP_ROUTE_IMMEDIATE_UPDATE;
+                    end
+                    currentInterval = _CTP_ROUTE_MIN_INTERVAL;
+                with
+                    // chooseAdvertiseTime()
+                    var u32 t = currentInterval;
+                    t = t / 2;
+                    t = t + _Random_rand32()%t;
+
+                    await (t) ms;                   // BeaconTimer
+
+// (!) we opted to await both and not send the beacon asynchronously in a
+// parallel trails.
+// adv. more self-containment, as here is the only place where we send beacons
+                    par/and do
+                        await (currentInterval-t) ms;   // TODO: subtrair late?
+                    with
+                        _task_updateRouteTask();
+
+                        // send beacon
+// LOCALS!!
+                        var _message_t             msg;
+                        var _ctp_routing_header_t* pay;
+                        pay = _BeaconSend_getPayload(&msg, _BeaconSend_maxPayloadLength());
+                        // TODO: assert is missing on .orig
+
+                        pay:options = 0;
+                        if _CtpCongestion_isCongested() then
+                            pay:options = pay:options | _CTP_OPT_ECN;
+                        end
+
+                        pay:parent = _glb_routeInfo.parent;
+                        if _glb_state_is_root then
+                            pay:etx = _glb_routeInfo.etx;
+                        else/if _glb_routeInfo.parent == _INVALID_ADDR then
+                            pay:etx = _glb_routeInfo.etx;
+                            pay:options = pay:options | _CTP_OPT_PULL;
+                        else
+                            pay:etx = _glb_routeInfo.etx +
+                                        _LinkEstimator_getLinkQuality(_glb_routeInfo.parent);
+                        end
+
+                        var u8 eval = _BeaconSend_send(_AM_BROADCAST_ADDR,
+                                                        &msg,
+                                                        sizeof<_ctp_routing_header_t>);
+                        if eval == _SUCCESS then
+                            await CTP_ROUTE_RADIO_SENDDONE;
+                        else/if eval == _EOFF then
+                            emit go_stop;
+                        end
+                    end
+
+                    // decay currentInterval
+                    currentInterval = currentInterval * 2;
+                    if currentInterval > _CTP_ROUTE_MAX_INTERVAL then
+                        currentInterval = _CTP_ROUTE_MAX_INTERVAL;
+                    end
+                end
+            end
+        end
+    end
+with
+    var s8 ctp?   = 0;  // TODO: unify both events?
+    var s8 radio? = 0;  // TODO: unify both events?
+    loop do
+        par/or do
+            await CTP_ROUTE_START;
+            ctp? = 1;
+        with
+            await CTP_ROUTE_STOP;
+            ctp? = 0;
+        with
+            await CTP_ROUTE_RADIO_STARTDONE;
+            radio? = 1;
+        with
+            await CTP_ROUTE_RADIO_STOPDONE;
+            radio? = 0;
+        end
+        if ctp? and radio? then
+            emit go_start;
+        else
+            emit go_stop;
+        end
+    end
+with
+    loop do
+        var _message_t* msg = await CTP_ROUTE_RADIO_RECEIVE;
+        //if _BeaconSend_payloadLength(msg) == sizeof<_ctp_routing_header_t> then
+            var _am_addr_t from = _AMPacket_source(msg);
+            var _ctp_routing_header_t* pay = <_ctp_routing_header_t*>
+                _BeaconSend_getPayload(msg, sizeof<_ctp_routing_header_t>);
+
+            var s8 congested? = _CtpRoutingPacket_getOption(msg, _CTP_OPT_ECN);
+
+            if pay:parent != _INVALID_ADDR then
+                if pay:etx == 0 then
+                    _LinkEstimator_insertNeighbor(from);
+                    _LinkEstimator_pinNeighbor(from);
+                end
+                _routingTableUpdateEntry(from, pay:parent, pay:etx);
+                _CtpInfo_setNeighborCongested(from, congested?);
+            end
+
+            if _CtpRoutingPacket_getOption(msg, _CTP_OPT_PULL) then
+                emit go_reset;
+            end
+        //end
+    end
+end

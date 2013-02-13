@@ -49,7 +49,6 @@ implementation
 
     command error_t Init.init() {
         ceu_go_init();
-        ceu_go_event(IN_TRICKLE_INIT, NULL);
         return SUCCESS;
     }
 

@@ -149,7 +149,6 @@ implementation {
 
     route_info_t routeInfo;
     bool state_is_root;
-    am_addr_t my_ll_addr;
 
     message_t beaconMsgBuffer;
     ctp_routing_header_t* beaconMsg;
@@ -157,10 +156,6 @@ implementation {
     /* routing table -- routing info about neighbors */
     routing_table_entry routingTable[routingTableSize];
     uint8_t routingTableActive;
-
-    /* statistics */
-    uint32_t parentChanges;
-    /* end statistics */
 
     // forward declarations
     void routingTableInit();
@@ -214,7 +209,6 @@ implementation {
         uint8_t maxLength;
         radioOn = FALSE;
         running = FALSE;
-        parentChanges = 0;
         state_is_root = 0;
         routeInfoInit(&routeInfo);
         routingTableInit();
@@ -226,7 +220,6 @@ implementation {
     }
 
     command error_t StdControl.start() {
-      my_ll_addr = call AMPacket.address();
       //start will (re)start the sending of messages
       if (!running) {
 	running = TRUE;
@@ -292,7 +285,7 @@ implementation {
             entry = &routingTable[i];
 
             // Avoid bad entries and 1-hop loops
-            if (entry->info.parent == INVALID_ADDR || entry->info.parent == my_ll_addr) {
+            if (entry->info.parent == INVALID_ADDR || entry->info.parent == call AMPacket.address()) {
               dbg("TreeRouting", 
                   "routingTable[%d]: neighbor: [id: %d parent: %d  etx: NO ROUTE]\n",  
                   i, entry->neighbor, entry->info.parent);
@@ -350,7 +343,6 @@ implementation {
                 // since the linkMetric may change, we will compose whenever
                 // we need it: i. when choosing a parent (here); 
                 //            ii. when choosing a next hop
-                parentChanges++;
 
                 dbg("TreeRouting","Changed parent. from %d to %d\n", routeInfo.parent, best->neighbor);
                 call CollectionDebug.logEventDbg(NET_C_TREE_NEW_PARENT, best->neighbor, best->info.etx, minEtx);
@@ -602,7 +594,7 @@ implementation {
         bool route_found = FALSE;
         route_found = (routeInfo.parent == INVALID_ADDR);
 	state_is_root = 1;
-	routeInfo.parent = my_ll_addr; //myself
+	routeInfo.parent = call AMPacket.address(); //myself
 	routeInfo.etx = 0;
 
         if (route_found) 
