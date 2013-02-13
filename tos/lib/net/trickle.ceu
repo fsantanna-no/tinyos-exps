@@ -49,8 +49,8 @@ do
                         end
                     with
 // TODO: dt
-                        var u16 dt = (tau/2) + (_Random_rand16()+1) % (tau/2);
-                        await (dt << (_TRICKLE_SCALE-1)) ms;
+                        var u16 dt_ = (tau/2) + (_Random_rand16()+1) % (tau/2);
+                        await (dt_ << (_TRICKLE_SCALE-1)) ms;
                         if count < _TRICKLE_K then
                             emit TRICKLE_FIRED(this.id);
                         end

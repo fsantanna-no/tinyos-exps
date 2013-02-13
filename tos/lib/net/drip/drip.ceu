@@ -1,0 +1,180 @@
+@define(NUM_DRIPS, 2)    // TODO: manual
+
+C nohold _DisseminatorControl_start(),
+         _DisseminatorControl_stop(),
+         _TrickleTimer_start(),
+         _TrickleTimer_stop(),
+         _TrickleTimer_reset(),
+         _TrickleTimer_incrementCounter(),
+         _DisseminationCache_storeData(),
+         _DisseminationCache_requestData(),
+         _DisseminationCache_requestSeqno(),
+         _ProbeAMSend_getPayload(),
+         _ProbeAMSend_payloadLength(),
+         _ProbeAMSend_send(),
+         _AMSend_send(),
+         _AMSend_maxPayloadLength(),
+         _memcpy();
+
+// TODO> remove
+C _dbg(), _TOS_NODE_ID;
+
+C _message_t=52,
+  _dissemination_message_t=6,
+  _dissemination_probe_message_t=6;
+
+C constant _DISSEMINATION_SEQNO_UNKNOWN,
+           _AM_BROADCAST_ADDR;
+
+input void DRIP_START;
+input void DRIP_STOP;
+input int  DRIP_SENDDONE;
+input int  DRIP_KEY_START;
+input int  DRIP_KEY_STOP;
+input int  DRIP_KEY_NEW;
+input int  DRIP_KEY_TRICKLE;
+input _message_t* DRIP_DATA_RECEIVE;
+input _message_t* DRIP_PROBE_RECEIVE;
+
+var Drip[NUM_DRIPS] drips;
+
+/*
+ * STATE-VARIABLES not required in Céu implementation:
+ *
+ * bool m_running:
+ *  - TRUE  on StdControl.start
+ *  - FALSE on StdControl.stop
+ * Used to protect "sendObject" and receive when drip is OFF.
+ * In Céu implementation, DRIP_STOP commands DRIP_KEY_STOP, killing all
+ * awaiting trails inside all drip instances.
+ *  
+ * bool m_busy:
+ *  - TRUE  between "send"/"sendDone"
+ *  - FALSE otherwise
+ * Used to protect "sendObject"/"sendProbe" from overwriting a pending send.
+ * In Céu implementation, internal "send" is not awaiting until DRIP_SENDONE,
+ * so it can never overwrite the buffer.
+ */
+
+loop do
+    par/or do
+        await DRIP_START;       // TODO: global await
+        loop i, NUM_DRIPS do
+            drips[i].key = i;
+            _DisseminatorControl_start(i);
+        end
+    with
+        await DRIP_STOP;        // TODO: global await
+        loop i, NUM_DRIPS do
+            _DisseminatorControl_stop(i);
+        end
+    end
+end
+
+// TODO: break in multiple for line comparison
+@define(AWAIT, `loop do key_ = await $1; if key_ == this.key then break; end end')
+
+class Drip with
+    var u16 key;
+do
+// TODO: key_
+    var u16 key_;
+    var u8 len_;
+    event u8 send;
+    var _message_t m_buf;
+
+    loop do
+        AWAIT(DRIP_KEY_START);
+        _TrickleTimer_start(this.key);
+        _TrickleTimer_reset(this.key);
+
+        par/or do
+            AWAIT(DRIP_KEY_STOP);
+            _TrickleTimer_stop(this.key);
+        with
+            loop do
+                AWAIT(DRIP_KEY_NEW);
+                _TrickleTimer_reset(this.key);
+                emit send=1;                    // broadcast data
+            end
+        with
+            loop do
+                AWAIT(DRIP_KEY_TRICKLE);
+                emit send=0;                    // bradcast meta
+            end
+        with
+            loop do
+                var _message_t* msg = await DRIP_DATA_RECEIVE;
+                var _dissemination_message_t* pay;
+                finalize
+                    pay = _ProbeAMSend_getPayload(msg,
+                            sizeof<_dissemination_message_t>);
+                with
+                    nothing;    // pay < msg
+                end
+
+                if pay and (pay:key==this.key) then
+                    var u32 seqno = _DisseminationCache_requestSeqno(this.key);
+
+                    if seqno == pay:seqno then          // same seqno: inc timer
+                        _TrickleTimer_incrementCounter(this.key);
+
+                    else/if seqno > pay:seqno or        // old data: send mine
+                            (   seqno!=_DISSEMINATION_SEQNO_UNKNOWN and
+                            pay:seqno==_DISSEMINATION_SEQNO_UNKNOWN )
+                    then
+                        emit send=1;
+
+                    else/if seqno < pay:seqno or        // new data: reset trickle
+                            (   seqno==_DISSEMINATION_SEQNO_UNKNOWN and
+                            pay:seqno!=_DISSEMINATION_SEQNO_UNKNOWN )
+                    then
+                        _TrickleTimer_reset(this.key);
+                        _DisseminationCache_requestData(this.key, &len_);
+                        _DisseminationCache_storeData(this.key, pay:data, 
+                            len_ - sizeof<_dissemination_message_t>,
+                            pay:seqno);
+                    end
+                end
+            end
+        with
+            loop do
+                await send;
+                var _dissemination_message_t* pay;
+                finalize
+                    pay = _ProbeAMSend_getPayload(&m_buf,
+                            sizeof<_dissemination_message_t>);
+                with
+                    nothing;    // pay < m_buf
+                end
+                if (pay != null) then
+                    pay:key = this.key;
+                    pay:seqno = _DisseminationCache_requestSeqno(this.key);
+
+                    // send metadata or data
+                    if send==0 or pay:seqno==_DISSEMINATION_SEQNO_UNKNOWN then
+                        _ProbeAMSend_send(_AM_BROADCAST_ADDR, &m_buf,
+                            sizeof<_dissemination_probe_message_t> );
+                        len_ = 0;
+                    else
+                        var void* obj;
+                        finalize
+                            obj = _DisseminationCache_requestData(this.key, &len_);
+                        with
+                            nothing;    // obj < global
+                        end
+	                    if (len_+sizeof<_dissemination_message_t>) >
+	                        _AMSend_maxPayloadLength() then
+	                        len_ = _AMSend_maxPayloadLength() -
+                                    sizeof<_dissemination_message_t>;
+                        end
+                        _memcpy(pay:data, obj, len_);
+                    end
+                    _AMSend_send(_AM_BROADCAST_ADDR, &m_buf,
+			                    sizeof<_dissemination_message_t> + len_);
+                end
+                await DRIP_SENDDONE;
+            end
+        end
+    end
+end
