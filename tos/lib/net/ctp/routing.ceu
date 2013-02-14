@@ -64,6 +64,17 @@ de bugs diminui.
 Mostrar as globais usadas como controle, as que são usadas dentro de controle,
 e ai globais de "banco de dados".
 
+Discussao mais qualitativa:
+- numero de linhas nao diz tudo
+- qtd de ifs dificulta "seguir" o código
+- distância entre referências de variáveis
+- na impl. de céu apenas o "go_reset", mostra a relaçao entre
+  RECEIVE e o beacon send
+- considerar words?? (remover "call")
+
+== TOKENS:
+- removed signal/call/command/post/task/atomic from tinyos
+
  */
 
 // TODO: analise de numero de IFs e GLBs

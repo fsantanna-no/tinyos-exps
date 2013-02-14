@@ -1,19 +1,19 @@
-var Drip[NUM_DRIPS] drips;
+var Drip [NUM_DRIPS] drips;
 loop do
     par/or do
-        await DRIP_START;       // TODO: global await
+        await DRIP_START;
         loop i, NUM_DRIPS do
             drips[i].key = i;
-            _DisseminatorControl_start(i);
+            _DisseminatorControl_start (i);
         end
     with
-        await DRIP_STOP;        // TODO: global await
+        await DRIP_STOP;
         loop i, NUM_DRIPS do
-            _DisseminatorControl_stop(i);
+            _DisseminatorControl_stop (i);
         end
     end
 end
-@define(AWAIT, `
+@define (AWAIT, `
 loop do
     key_ = await $1;
     if key_ == this.key then
@@ -29,46 +29,46 @@ do
     event u8 send;
     var _message_t m_buf;
     loop do
-        AWAIT(DRIP_KEY_START);
-        _TrickleTimer_start(this.key);
-        _TrickleTimer_reset(this.key);
+        AWAIT (DRIP_KEY_START);
+        _TrickleTimer_start (this.key);
+        _TrickleTimer_reset (this.key);
         par/or do
-            AWAIT(DRIP_KEY_STOP);
-            _TrickleTimer_stop(this.key);
+            AWAIT (DRIP_KEY_STOP);
+            _TrickleTimer_stop (this.key);
         with
             loop do
-                AWAIT(DRIP_KEY_NEW);
-                _TrickleTimer_reset(this.key);
-                emit send=1;                    // broadcast data
+                AWAIT (DRIP_KEY_NEW);
+                _TrickleTimer_reset (this.key);
+                emit send = 1;
             end
         with
             loop do
-                AWAIT(DRIP_KEY_TRICKLE);
-                emit send=0;                    // bradcast meta
+                AWAIT (DRIP_KEY_TRICKLE);
+                emit send = 0;
             end
         with
             loop do
                 var _message_t* msg = await DRIP_DATA_RECEIVE;
                 var _dissemination_message_t* pay;
-                    pay = _ProbeAMSend_getPayload(msg,
-                            sizeof<_dissemination_message_t>);
-                if pay and (pay:key==this.key) then
-                    var u32 seqno = _DisseminationCache_requestSeqno(this.key);
-                    if seqno == pay:seqno then          // same seqno: inc timer
-                        _TrickleTimer_incrementCounter(this.key);
-                    else/if seqno > pay:seqno or        // old data: send mine
-                            (   seqno!=_DISSEMINATION_SEQNO_UNKNOWN and
-                            pay:seqno==_DISSEMINATION_SEQNO_UNKNOWN )
+                    pay = _ProbeAMSend_getPayload (msg,
+                            sizeof <_dissemination_message_t>);
+                if pay and (pay:key == this.key) then
+                    var u32 seqno = _DisseminationCache_requestSeqno (this.key);
+                    if seqno == pay:seqno then
+                        _TrickleTimer_incrementCounter (this.key);
+                    else/if seqno > pay:seqno or
+                            (seqno != _DISSEMINATION_SEQNO_UNKNOWN and
+                            pay:seqno == _DISSEMINATION_SEQNO_UNKNOWN)
                     then
-                        emit send=1;
-                    else/if seqno < pay:seqno or        // new data: reset trickle
-                            (   seqno==_DISSEMINATION_SEQNO_UNKNOWN and
-                            pay:seqno!=_DISSEMINATION_SEQNO_UNKNOWN )
+                        emit send = 1;
+                    else/if seqno < pay:seqno or
+                            (seqno == _DISSEMINATION_SEQNO_UNKNOWN and
+                            pay:seqno != _DISSEMINATION_SEQNO_UNKNOWN)
                     then
-                        _TrickleTimer_reset(this.key);
-                        _DisseminationCache_requestData(this.key, &len_);
-                        _DisseminationCache_storeData(this.key, pay:data, 
-                            len_ - sizeof<_dissemination_message_t>,
+                        _TrickleTimer_reset (this.key);
+                        _DisseminationCache_requestData (this.key, &len_);
+                        _DisseminationCache_storeData (this.key, pay:data, 
+                            len_ - sizeof <_dissemination_message_t>,
                             pay:seqno);
                     end
                 end
@@ -77,27 +77,27 @@ do
             loop do
                 await send;
                 var _dissemination_message_t* pay;
-                    pay = _ProbeAMSend_getPayload(&m_buf,
-                            sizeof<_dissemination_message_t>);
+                    pay = _ProbeAMSend_getPayload (&m_buf,
+                            sizeof <_dissemination_message_t>);
                 if (pay != null) then
                     pay:key = this.key;
-                    pay:seqno = _DisseminationCache_requestSeqno(this.key);
-                    if send==0 or pay:seqno!=_DISSEMINATION_SEQNO_UNKNOWN then
-                        _ProbeAMSend_send(_AM_BROADCAST_ADDR, &m_buf,
-                            sizeof<_dissemination_probe_message_t> );
+                    pay:seqno = _DisseminationCache_requestSeqno (this.key);
+                    if send == 0 or pay:seqno != _DISSEMINATION_SEQNO_UNKNOWN then
+                        _ProbeAMSend_send (_AM_BROADCAST_ADDR, &m_buf,
+                            sizeof <_dissemination_probe_message_t>);
                         len_ = 0;
                     else
                         var void* obj;
-                            obj = _DisseminationCache_requestData(this.key, &len_);
-	                    if (len_+sizeof<_dissemination_message_t>) >
-	                        _AMSend_maxPayloadLength() then
-	                        len_ = _AMSend_maxPayloadLength() -
-                                    sizeof<_dissemination_message_t>;
+                            obj = _DisseminationCache_requestData (this.key, &len_);
+	                    if (len_ + sizeof <_dissemination_message_t>) >
+	                        _AMSend_maxPayloadLength () then
+	                        len_ = _AMSend_maxPayloadLength () -
+                                    sizeof <_dissemination_message_t>;
                         end
-                        _memcpy(pay:data, obj, len_);
+                        _memcpy (pay:data, obj, len_);
                     end
-                    _AMSend_send(_AM_BROADCAST_ADDR, &m_buf,
-			                    sizeof<_dissemination_message_t> + len_);
+                    _AMSend_send (_AM_BROADCAST_ADDR, &m_buf,
+			                    sizeof <_dissemination_message_t> + len_);
                 end
                 await DRIP_SENDDONE;
             end

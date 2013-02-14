@@ -14,35 +14,35 @@ do
         var u16 tau = _TRICKLE_TAU_H;
         par/or do
             loop do
-                AWAIT(TRICKLE_RESET);
+                AWAIT (TRICKLE_RESET);
                 tau = _TRICKLE_TAU_L;
             end
         with
-            AWAIT(TRICKLE_START);
+            AWAIT (TRICKLE_START);
             par/or do
-                AWAIT(TRICKLE_STOP);
+                AWAIT (TRICKLE_STOP);
                 tau = _TRICKLE_TAU_H;
             with
                 loop do
                     var u8 count = 0;
                     par/or do
-                        await (tau << (_TRICKLE_SCALE-1)) ms;
+                        await (tau << (_TRICKLE_SCALE - 1)) ms;
                         tau = tau * 2;
                         if tau > _TRICKLE_TAU_H then
                             tau = _TRICKLE_TAU_H;
                         end
                     with
-                        AWAIT(TRICKLE_RESET);
+                        AWAIT (TRICKLE_RESET);
                     with
                         loop do
-                            AWAIT(TRICKLE_INC);
+                            AWAIT (TRICKLE_INC);
                             count = count + 1;
                         end
                     with
-                        var u16 dt = (tau/2) + _Random__rand16() % (tau/2);
-                        await (dt << (_TRICKLE_SCALE-1)) ms;
+                        var u16 dt = (tau / 2) + _Random__rand16 () % (tau / 2);
+                        await (dt << (_TRICKLE_SCALE - 1)) ms;
                         if count < _TRICKLE_K then
-                            emit TRICKLE_FIRED(this.id);
+                            emit TRICKLE_FIRED (this.id);
                         end
                         await FOREVER;
                     end
@@ -52,8 +52,8 @@ do
     end
 end
 await TRICKLE_INIT;
-var Trickle[4] trickles;
+var Trickle [4] trickles;
 loop i, 4 do
-    trickles[i].id = i;
+    trickles [i] .id = i;
 end
 await FOREVER;
