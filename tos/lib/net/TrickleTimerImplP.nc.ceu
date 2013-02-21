@@ -48,13 +48,11 @@ implementation
     #include "_ceu_code.cceu"
 
     command error_t Init.init() {
-        ceu_go_init();
-        return SUCCESS;
+        return ! ceu_go_init();
     }
 
     command error_t TrickleTimer.start[uint8_t id]() {
-        ceu_go_event(IN_TRICKLE_START, &id);
-        return SUCCESS; // TODO: EBUSY
+        return ! ceu_go_event(IN_TRICKLE_START, &id);
     }
 
     command void TrickleTimer.stop[uint8_t id]() {

@@ -1,0 +1,233 @@
+C _clientPtrs, _clientEntries;
+C _loopbackMsgPtr, _loopbackMsg, _seqno;
+
+C constant  _CLIENT_COUNT,
+            _CTP_OPT_ECN, _CTP_OPT_PULL,
+            _NO_ROUTE_RETRY,
+            _QUEUE_CONGESTED,
+            _ESIZE, _SUCCESS;
+
+C _fe_queue_entry_t = 0,
+  _message_t        = 52;
+
+C _clearState(),
+  _CtpInfo_recomputeRoutes(),
+  _MessagePool_put(),
+  _packetComplete(),
+  _QEntryPool_put(),
+  _Receive_receive(),
+  _RootControl_isRoot(),
+  _SendQueue_dequeue(),
+  _SendQueue_empty(),
+  _SendQueue_head(),
+  _SubSend_send(),
+  _UnicastNameFreeRouting_hasRoute(),
+  _UnicastNameFreeRouting_nextHop();
+
+C nohold _ctpInfo_getEtx(),
+         _CtpPacket_clearOption(),
+         _CtpPacket_setEtx(),
+         _CtpPacket_setOption(),
+         _getHeader(),
+         _hasState(),
+         _LinkEstimator_txAck(),
+         _LinkEstimator_txNoAck(),
+         _memcpy(),
+         _Packet_setPayloadLength(),
+         _PacketAcknowledgements_requestAck(),
+         _SentCache_lookup(),
+         _SubPacket_payloadLength();
+
+C pure _AMPacket_destination(),
+       _Packet_payloadLength(),
+       _Packet_getPayload(),
+       _Packet_maxPayloadLength(),
+       _PacketAcknowledgements_wasAcked();
+
+input void CTP_FWD_START;
+input void CTP_FWD_STOP;
+input int  CTP_FWD_RADIO_STARTDONE;
+input int  CTP_FWD_RADIO_STOPDONE;
+input int  CTP_FWD_RADIO_SENDDONE;
+
+event void go_send;
+
+@define(AWAIT, `
+loop do
+    var int v = await $1;
+    if v == $2 then
+        break;
+    end
+end
+')
+
+loop i, _CLIENT_COUNT do
+    _clientPtrs[i] = _clientEntries + i;
+end
+
+var _message_t  loopbackMsg;
+var _message_t* loopbackMsgPtr = &loopbackMsg;
+
+_seqno = 0;
+
+/*
+ * ROUTING_ON       = 0x2, // Forwarding running?
+ */
+
+par do
+    loop do
+        await CTP_FWD_START;
+
+        par/or do
+            await CTP_FWD_STOP;
+        with
+            await CTP_FWD_CLIENT_SEND;
+
+            var _ctp_data_header_t* hdr;
+            var _fe_queue_entry_t*  qe;
+
+            if (len > call Send.maxPayloadLength[client]()) {return ESIZE;}
+
+            call Packet.setPayloadLength(msg, len);
+            hdr = getHeader(msg);
+            hdr->origin = TOS_NODE_ID;
+            hdr->originSeqNo  = seqno++;
+            hdr->type = call CollectionId.fetch[client]();
+            hdr->thl = 0;
+
+            qe = clientPtrs[client];
+            qe:msg = msg;
+            qe:client = client;
+            qe:retries = MAX_RETRIES;
+            if (call SendQueue.enqueue(qe) == SUCCESS) {
+                emit go_send;
+                clientPtrs[client] = NULL;
+                return SUCCESS;
+            }
+            else {
+                call CollectionDebug.logEvent(NET_C_FE_SEND_QUEUE_FULL);
+                return FAIL;
+            }
+        end
+    end
+with
+    loop do
+        par/or do
+            @AWAIT(CTP_FWD_RADIO_STARTDONE, _SUCCESS);
+            emit go_send;
+        with
+            await CTP_FWD_RADIO_STOPDONE;
+        end
+    end
+with
+    loop do
+        if _SendQueue_empty() then
+            await go_send;
+        end
+
+        var u16 gradient;
+
+        var u8 err = (not _RootControl_isRoot()) and
+                     (not _UnicastNameFreeRouting_hasRoute())
+                   or
+                     (_ctpInfo_getEtx(&gradient) != _SUCCESS);
+        if err then
+            await (_NO_ROUTE_RETRY) ms;;
+            err = (not _RootControl_isRoot()) and
+                    (not _UnicastNameFreeRouting_hasRoute())
+                  or
+                    (_ctpInfo_getEtx(&gradient) != _SUCCESS);
+        end
+        if err then
+            await go_send;
+            continue;
+        end
+
+        var _fe_queue_entry_t* qe;
+        finalize
+            qe = _SendQueue_head();
+        with
+            nothing;     // queue is global
+        end
+
+        if _SentCache_lookup(qe:msg) then
+            _SendQueue_dequeue();
+            _MessagePool_put(qe:msg)
+                finalize with nothing; end; // msg is global
+            _QEntryPool_put(qe)
+                finalize with nothing; end; // qe is global
+            continue;
+        end
+
+        if _RootControl_isRoot() then
+            _memcpy(loopbackMsgPtr, qe:msg, sizeof<_message_t>);
+
+            var u8 collectid     = _getHeader(qe:msg):type;
+            var u8 payloadLength = _Packet_payloadLength(loopbackMsgPtr);
+            var u8* payload      = _Packet_getPayload(loopbackMsgPtr, payloadLength);
+
+// TODO change buffers
+            finalize
+                loopbackMsgPtr = _Receive_receive(collectid, loopbackMsgPtr,
+                                                  payload, payloadLength)
+                                     finalize with nothing; end; // message has being copied
+            with
+                nothing;    // returned msg is global
+            end
+            await (0) ms;
+            continue;
+        end
+
+        _CtpPacket_setEtx(qe:msg, gradient);
+        _CtpPacket_clearOption(qe:msg, _CTP_OPT_ECN | _CTP_OPT_PULL);
+
+        var u8 pending? = (_PacketAcknowledgements_requestAck(qe:msg) == _SUCCESS);
+
+        if _hasState(_QUEUE_CONGESTED) then
+            _CtpPacket_setOption(qe:msg, _CTP_OPT_ECN);
+            _clearState(_QUEUE_CONGESTED);
+        end
+
+        var u8  payloadLen   = _SubPacket_payloadLength(qe:msg);
+        var u16 dest         = _UnicastNameFreeRouting_nextHop();
+        var u8 subsendResult = _SubSend_send(dest, qe:msg, payloadLen)
+                                finalize with nothing; end; // msg is global
+
+        if subsendResult == _ESIZE then
+            _Packet_setPayloadLength(qe:msg, _Packet_maxPayloadLength());
+            continue;
+        end
+
+        if subsendResult != _SUCCESS then
+            await go_send;
+            continue;
+        end
+
+        var u8 err = await CTP_FWD_RADIO_SENDDONE;
+
+        if err != _SUCCESS then
+            await (999999) ms;
+            continue;
+        end
+
+        var u8 succ? = (not pending?) or _PacketAcknowledgements_wasAcked(qe:msg);
+
+        if succ? then
+            _LinkEstimator_txAck(_AMPacket_destination(qe:msg));
+        else
+            _LinkEstimator_txNoAck(_AMPacket_destination(qe:msg));
+            _CtpInfo_recomputeRoutes();
+        end
+
+        if (not succ?) and qe:retries>1 then
+            qe:retries = qe:retries - 1;
+            await (999999) ms;
+            continue;
+        end
+
+        _SendQueue_dequeue();
+        _packetComplete(qe, qe:msg, succ?)
+            finalize with nothing; end;     // qe/msg are global
+        await (999999) ms;
+    end
+end

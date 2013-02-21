@@ -39,6 +39,7 @@
         state_is_root = 0;
         routeInfoInit (&routeInfo);
         routingTableInit ();
+        return SUCCESS;
     }
     command error_t StdControl.start () {
       if (! running) {
@@ -46,9 +47,11 @@
 	resetInterval ();
 	RouteTimer.startPeriodic (BEACON_INTERVAL);
       }     
+      return SUCCESS;
     }
     command error_t StdControl.stop () {
         running = FALSE;
+        return SUCCESS;
     } 
     event void RadioControl.startDone (error_t error) {
         radioOn = TRUE;
@@ -80,7 +83,6 @@
         } else {
             beaconMsg->etx = routeInfo.etx + LinkEstimator.getLinkQuality(routeInfo.parent);
         }
-        CollectionDebug.logEventRoute (NET_C_TREE_SENT_BEACON, beaconMsg->parent, 0, beaconMsg->etx);
         eval = BeaconSend.send (AM_BROADCAST_ADDR, 
                                     &beaconMsgBuffer, 
                                     sizeof (ctp_routing_header_t));

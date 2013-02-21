@@ -66,24 +66,19 @@ implementation
     #include "_ceu_code.cceu"
 
     command error_t StdControl.start() {
-        ceu_go_init();
-        ceu_go_event(IN_DRIP_START, NULL);
-        return SUCCESS;
+        return ! ceu_go_init();
     }
 
     command error_t StdControl.stop() {
-        ceu_go_event(IN_DRIP_STOP, NULL);
-        return SUCCESS;
+        return ! ceu_go_event(IN_DRIP_STOP, NULL);
     }
 
     event error_t DisseminationCache.start[ uint16_t key ]() {
-        ceu_go_event(IN_DRIP_KEY_START, &key);
-        return SUCCESS; // TODO: result
+        return ! ceu_go_event(IN_DRIP_KEY_START, &key);
     }
 
     event error_t DisseminationCache.stop[ uint16_t key ]() {
-        ceu_go_event(IN_DRIP_KEY_STOP, &key);
-        return SUCCESS;
+        return ! ceu_go_event(IN_DRIP_KEY_STOP, &key);
     }
 
     event void DisseminationCache.newData[ uint16_t key ]() {

@@ -9,12 +9,13 @@ C nohold _DisseminatorControl_start(),
          _DisseminationCache_storeData(),
          _DisseminationCache_requestData(),
          _DisseminationCache_requestSeqno(),
-         _ProbeAMSend_getPayload(),
          _ProbeAMSend_payloadLength(),
          _ProbeAMSend_send(),
          _AMSend_send(),
          _AMSend_maxPayloadLength(),
          _memcpy();
+
+C pure _ProbeAMSend_getPayload();
 
 // TODO> remove
 C _dbg(), _TOS_NODE_ID;
@@ -105,13 +106,8 @@ do
         with
             loop do
                 var _message_t* msg = await DRIP_DATA_RECEIVE;
-                var _dissemination_message_t* pay;
-                finalize
-                    pay = _ProbeAMSend_getPayload(msg,
-                            sizeof<_dissemination_message_t>);
-                with
-                    nothing;    // pay < msg
-                end
+                var _dissemination_message_t* pay = _ProbeAMSend_getPayload(msg,
+                                                        sizeof<_dissemination_message_t>);
 
                 if pay and (pay:key==this.key) then
                     var u32 seqno = _DisseminationCache_requestSeqno(this.key);
@@ -140,13 +136,8 @@ do
         with
             loop do
                 await send;
-                var _dissemination_message_t* pay;
-                finalize
-                    pay = _ProbeAMSend_getPayload(&m_buf,
-                            sizeof<_dissemination_message_t>);
-                with
-                    nothing;    // pay < m_buf
-                end
+                var _dissemination_message_t* pay = _ProbeAMSend_getPayload(&m_buf,
+                                                        sizeof<_dissemination_message_t>);
                 if (pay != null) then
                     pay:key = this.key;
                     pay:seqno = _DisseminationCache_requestSeqno(this.key);

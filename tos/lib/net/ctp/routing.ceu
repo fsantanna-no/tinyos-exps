@@ -75,6 +75,8 @@ Discussao mais qualitativa:
 == TOKENS:
 - removed signal/call/command/post/task/atomic from tinyos
 
+== TODO: (-) adjust for loops in C
+== TODO: (+) adjust lines in C
  */
 
 // TODO: analise de numero de IFs e GLBs

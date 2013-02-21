@@ -1,26 +1,20 @@
-@define(AWAIT, `
-    loop do
-        id_ = await $1;
-        if id_ == this.id then
-            break;
-        end
-    end
-')
 class Trickle with
     var u8 id;
 do
-    var u8 id_;
     loop do
         var u16 tau = _TRICKLE_TAU_H;
         par/or do
             loop do
-                AWAIT (TRICKLE_RESET);
+                var u8 id_ = AWAIT (TRICKLE_RESET);
+                                until id_ == this.id;
                 tau = _TRICKLE_TAU_L;
             end
         with
-            AWAIT (TRICKLE_START);
+            var u8 id_ = AWAIT (TRICKLE_START);
+                            until id_ == this.id;
             par/or do
-                AWAIT (TRICKLE_STOP);
+                var u8 id_ = AWAIT (TRICKLE_STOP);
+                                until id_ == this.id;
                 tau = _TRICKLE_TAU_H;
             with
                 loop do
@@ -32,10 +26,12 @@ do
                             tau = _TRICKLE_TAU_H;
                         end
                     with
-                        AWAIT (TRICKLE_RESET);
+                        var u8 id_ = AWAIT (TRICKLE_RESET);
+                                        until id_ == this.id;
                     with
                         loop do
-                            AWAIT (TRICKLE_INC);
+                            var u8 id_ = AWAIT (TRICKLE_INC);
+                                            until id_ == this.id;
                             count = count + 1;
                         end
                     with

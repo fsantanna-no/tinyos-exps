@@ -1,0 +1,133 @@
+input void CC_RECV_START;
+input void CC_RECV_STOP;
+
+input void CC_RECV_FIFOP;                       // async
+input void CC_RECV_SPI_GRANTED;
+
+input _cc_recv_readdone_t* CC_RECV_READDONE;    // async
+
+C //types
+    _cc_recv_readdone_t = 0,
+    _cc2420_metadata_t  = 0,
+    _cc2420_header_t    = 0,
+    _message_t          = 52;
+
+C constant
+    _FALSE, _TRUE, _SUCCESS,
+    _AM_BROADCAST_ADDR,
+    _CC2420_SIZE,
+    _IEEE154_FCF_ACK_REQ,
+    _IEEE154_FCF_FRAME_TYPE,
+    _IEEE154_TYPE_DATA,
+    _MAC_PACKET_SIZE,
+    _RXFIFO_SIZE,
+    _SACK_HEADER_LENGTH,
+    _TIMESTAMP_QUEUE_SIZE,
+    _OFF1;
+    C do
+        #define OFF1 (offsetof(message_t,data))
+    end
+
+C
+    _m_p_rx_buf,
+    _m_timestamp_head,
+    _m_timestamp_queue,
+    _m_timestamp_size,
+    _receivingPacket;
+
+C pure
+    _CC2420PacketBody_getHeader(),
+    _CC2420PacketBody_getMetadata(),
+    _passesAddressCheck();
+
+C nohold
+    _CC2420Receive_receive(),       // user can't hold msg
+    _Receive_receive(),             // user can't hols msg
+    _PacketTimeStamp_set(),
+    _PacketTimeStamp_clear();
+
+C
+    _CC2420Config_getShortAddr(),
+    _CC2420Config_isAutoAckEnabled(),
+    _CC2420Config_isHwAutoAckDefault(),
+    _CSN_clr(),
+    _CSN_set(),
+    _FIFO_get(),
+    _FIFOP_get(),
+    _InterruptFIFOP_enableFallingEdge(),
+    _InterruptFIFOP_disable(),
+    _RXFIFO_beginRead(),
+    _RXFIFO_continueRead(),
+    _SACK_strobe(),
+    _SFLUSHRX_strobe(),
+    _SpiResource_immediateRequest(),
+    _SpiResource_isOwner(),
+    _SpiResource_release(),
+    _SpiResource_request();
+
+loop do
+    await CC_RECV_START;
+    _InterruptFIFOP_enableFallingEdge();
+
+    par/or do
+        await CC_RECV_STOP;
+        _CSN_set();
+        _InterruptFIFOP_disable();
+
+    with
+        event void next;
+        loop do
+            // reset_state()
+            var u8 m_bytes_left = _RXFIFO_SIZE;
+            _receivingPacket = _FALSE;
+            _m_timestamp_head = 0;
+            _m_timestamp_size = 0;
+            var u8 m_missed_packets = 0;
+            //m_state = S_STARTED;
+
+            _SpiResource_release();
+            await CC_RECV_FIFOP;
+
+            par/or do
+                await next;
+            with
+                loop do
+                    await CC_RECV_FIFOP;
+                    m_missed_packets = m_missed_packets + 1;
+                end
+            with
+                loop do
+                    // waitForNextPacket()
+                    if (m_missed_packets>0 and _FIFO_get())
+                    or (not _FIFOP_get())
+                    then
+                        if m_missed_packets > 0 then
+                            m_missed_packets = m_missed_packets - 1;
+                        end
+                    else
+                        emit next;
+                    end
+
+                    // beginReceive();
+                    _receivingPacket = _TRUE;
+                    if not (_SpiResource_isOwner() or
+                            _SpiResource_immediateRequest() == _SUCCESS)
+                    then
+                        _SpiResource_request();
+                        await CC_RECV_SPI_GRANTED;
+                    end
+
+                    // receive();
+                    _CSN_clr();
+                    _RXFIFO_beginRead(
+                        <u8*> _CC2420PacketBody_getHeader(_m_p_rx_buf),
+                        1 )
+                        finalize with nothing; end;   // _m_p_rx_buf is global
+
+                    //m_state = S_RX_LENGTH;
+                    @include(read.ceu)
+                end
+            end
+        end
+    end
+end

@@ -85,18 +85,15 @@ implementation
     #include "_ceu_code.cceu"
 
     command error_t Init.init() {
-        ceu_go_init();
-        return SUCCESS;
+        return ! ceu_go_init();
     }
 
     command error_t StdControl.start() {
-        ceu_go_event(IN_CTP_ROUTE_START, NULL);
-        return SUCCESS;
+        return ! ceu_go_event(IN_CTP_ROUTE_START, NULL);
     }
 
     command error_t StdControl.stop() {
-        ceu_go_event(IN_CTP_ROUTE_STOP, NULL);
-        return SUCCESS;
+        return ! ceu_go_event(IN_CTP_ROUTE_STOP, NULL);
     }
 
     event void RadioControl.startDone(error_t error) {

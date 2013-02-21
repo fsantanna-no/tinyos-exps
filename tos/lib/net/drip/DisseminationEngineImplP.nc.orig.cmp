@@ -9,6 +9,7 @@
       DisseminatorControl.start [i]();
     }
     m_running = TRUE;
+    return SUCCESS;
   }
   error_t StdControl.stop () {
     uint8_t i;
@@ -16,13 +17,16 @@
       DisseminatorControl.stop [i]();
     }
     m_running = FALSE;
+    return SUCCESS;
   }
   event error_t DisseminationCache.start [uint16_t key]() {
     error_t result = TrickleTimer.start [key]();
     TrickleTimer.reset [key]();
+    return result;
   }
   event error_t DisseminationCache.stop [uint16_t key]() {
     TrickleTimer.stop [key]();
+    return SUCCESS;
   }
   event void DisseminationCache.newData [uint16_t key]() {
     sendObject (key);

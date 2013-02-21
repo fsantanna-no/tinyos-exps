@@ -17,10 +17,11 @@
     }
       Pending.clearAll ();
       Changed.clearAll ();
+    return SUCCESS;
   }
   error_t TrickleTimer.start [uint8_t id]() {
     if (trickles [id] .time != 0) {
-      return;
+      return EBUSY;
     }
     trickles [id] .time = 0;
     trickles [id] .remainder = 0;
@@ -28,6 +29,7 @@
     generateTime (id);
       Changed.set (id);
     adjustTimer ();
+    return SUCCESS;
   }
   void TrickleTimer.stop [uint8_t id]() {
     trickles [id] .time = 0;

@@ -13,37 +13,32 @@ loop do
         end
     end
 end
-@define (AWAIT, `
-loop do
-    key_ = await $1;
-    if key_ == this.key then
-        break;
-    end
-end
-')
 class Drip with
     var u16 key;
 do
-    var u8 key_;
     var u8 len_;
     event u8 send;
     var _message_t m_buf;
     loop do
-        AWAIT (DRIP_KEY_START);
+        var _key = await DRIP_KEY_START
+                        until (_key == this.key);
         _TrickleTimer_start (this.key);
         _TrickleTimer_reset (this.key);
         par/or do
-            AWAIT (DRIP_KEY_STOP);
+            var _key = await DRIP_KEY_STOP
+                            until (_key == this.key);
             _TrickleTimer_stop (this.key);
         with
             loop do
-                AWAIT (DRIP_KEY_NEW);
+                var _key = await DRIP_KEY_NEW
+                                until (_key == this.key);
                 _TrickleTimer_reset (this.key);
                 emit send = 1;
             end
         with
             loop do
-                AWAIT (DRIP_KEY_TRICKLE);
+                var _key = await DRIP_KEY_TRICKLE
+                                until (_key == this.key);
                 emit send = 0;
             end
         with
