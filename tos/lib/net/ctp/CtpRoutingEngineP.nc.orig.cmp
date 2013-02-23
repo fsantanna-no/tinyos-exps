@@ -1,138 +1,133 @@
-    bool radioOn = FALSE;
-    bool running = FALSE;
-    bool sending = FALSE;
-    route_info_t routeInfo;
-    bool state_is_root;
-    message_t beaconMsgBuffer;
-    ctp_routing_header_t* beaconMsg;
-    uint32_t currentInterval = minInterval;
-    uint32_t t; 
-    bool tHasPassed;
-    void chooseAdvertiseTime () {
-       t = currentInterval;
-       t /= 2;
-       t += Random.rand32 () % t;
-       tHasPassed = FALSE;
-       BeaconTimer.startOneShot (t);
-    }
-    void resetInterval () {
+bool radioOn = FALSE;
+bool running = FALSE;
+bool sending = FALSE;
+route_info_t routeInfo;
+bool state_is_root;
+message_t beaconMsgBuffer;
+ctp_routing_header_t* beaconMsg;
+uint32_t currentInterval = minInterval;
+uint32_t t;
+bool tHasPassed;
+void chooseAdvertiseTime () {
+    t = currentInterval;
+    t /= 2;
+    t += Random.rand32 () % t;
+    tHasPassed = FALSE;
+    BeaconTimer.startOneShot (t);
+}
+void resetInterval () {
       currentInterval = minInterval;
       chooseAdvertiseTime ();
+}
+void decayInterval () {
+    currentInterval *= 2;
+    if (currentInterval > maxInterval) {
+        currentInterval = maxInterval;
     }
-    void decayInterval () {
-        currentInterval *= 2;
-        if (currentInterval > maxInterval) {
-          currentInterval = maxInterval;
-        }
-      chooseAdvertiseTime ();
+    chooseAdvertiseTime ();
+}
+void remainingInterval () {
+    uint32_t remaining = currentInterval;
+    remaining -= t;
+    tHasPassed = TRUE;
+    BeaconTimer.startOneShot (remaining);
+}
+error_t Init.init () {
+    uint8_t maxLength;
+    radioOn = FALSE;
+    running = FALSE;
+    state_is_root = 0;
+    routeInfoInit (& routeInfo);
+    routingTableInit ();
+}
+error_t StdControl.start () {
+    if (! running) {
+        running = TRUE;
+        resetInterval ();
+        RouteTimer.startPeriodic (BEACON_INTERVAL);
     }
-    void remainingInterval () {
-       uint32_t remaining = currentInterval;
-       remaining -= t;
-       tHasPassed = TRUE;
-       BeaconTimer.startOneShot (remaining);
+}
+error_t StdControl.stop () {
+    running = FALSE;
+}
+event void RadioControl.startDone (error_t error) {
+    radioOn = TRUE;
+    if (running) {
+        uint16_t nextInt;
+        nextInt = Random.rand16() % BEACON_INTERVAL;
+        nextInt += BEACON_INTERVAL >> 1;
     }
-    command error_t Init.init () {
-        uint8_t maxLength;
-        radioOn = FALSE;
-        running = FALSE;
-        state_is_root = 0;
-        routeInfoInit (&routeInfo);
-        routingTableInit ();
-        return SUCCESS;
-    }
-    command error_t StdControl.start () {
-      if (! running) {
-	running = TRUE;
-	resetInterval ();
-	RouteTimer.startPeriodic (BEACON_INTERVAL);
-      }     
-      return SUCCESS;
-    }
-    command error_t StdControl.stop () {
-        running = FALSE;
-        return SUCCESS;
-    } 
-    event void RadioControl.startDone (error_t error) {
-        radioOn = TRUE;
-        if (running) {
-            uint16_t nextInt;
-            nextInt = Random.rand16() % BEACON_INTERVAL;
-            nextInt += BEACON_INTERVAL >> 1;
-        }
-    } 
-    event void RadioControl.stopDone (error_t error) {
+}
+event void RadioControl.stopDone (error_t error) {
         radioOn = FALSE;
     }
-    task void sendBeaconTask () {
-        error_t eval;
-        if (sending) {
-            return;
-        }
-        beaconMsg->options = 0;
-        if (CtpCongestion.isCongested ()) {
-            beaconMsg->options |= CTP_OPT_ECN;
-        }
-        beaconMsg->parent = routeInfo.parent;
-        if (state_is_root) {
-            beaconMsg->etx = routeInfo.etx;
-        }
-        else if (routeInfo.parent == INVALID_ADDR) {
-            beaconMsg->etx = routeInfo.etx;
-            beaconMsg->options |= CTP_OPT_PULL;
-        } else {
-            beaconMsg->etx = routeInfo.etx + LinkEstimator.getLinkQuality(routeInfo.parent);
-        }
-        eval = BeaconSend.send (AM_BROADCAST_ADDR, 
-                                    &beaconMsgBuffer, 
-                                    sizeof (ctp_routing_header_t));
-        if (eval == SUCCESS) {
-            sending = TRUE;
-        } else if (eval == EOFF) {
-            radioOn = FALSE;
-        }
+task void sendBeaconTask () {
+    error_t eval;
+    if (sending) {
+        return;
     }
-    event void BeaconSend.sendDone (message_t* msg, error_t error) {
-        sending = FALSE;
+    beaconMsg->options = 0;
+    if (CtpCongestion.isCongested ()) {
+        beaconMsg->options |= CTP_OPT_ECN;
     }
-    event void RouteTimer.fired () {
-      if (radioOn && running) {
-         updateRouteTask ();
-      }
+    beaconMsg->parent = routeInfo.parent;
+    if (state_is_root) {
+        beaconMsg->etx = routeInfo.etx;
+    } else if (routeInfo.parent == INVALID_ADDR) {
+        beaconMsg->etx = routeInfo.etx;
+        beaconMsg->options |= CTP_OPT_PULL;
+    } else {
+        beaconMsg->etx = routeInfo.etx +
+            LinkEstimator.getLinkQuality(routeInfo.parent);
     }
-    event void BeaconTimer.fired () {
-      if (radioOn && running) {
+    eval = BeaconSend.send (AM_BROADCAST_ADDR, & beaconMsgBuffer,
+                            sizeof (ctp_routing_header_t));
+    if (eval == SUCCESS) {
+        sending = TRUE;
+    } else if (eval == EOFF) {
+        radioOn = FALSE;
+    }
+}
+event void BeaconSend.sendDone (message_t* msg, error_t error) {
+    sending = FALSE;
+}
+event void RouteTimer.fired () {
+    if (radioOn && running) {
+        updateRouteTask ();
+    }
+}
+event void BeaconTimer.fired () {
+    if (radioOn && running) {
         if (! tHasPassed) {
-          updateRouteTask ();
-          sendBeaconTask ();
-          remainingInterval ();
+            updateRouteTask ();
+            sendBeaconTask ();
+            remainingInterval ();
         }
         else {
-          decayInterval ();
+            decayInterval ();
         }
-      }
     }
-    event message_t* BeaconReceive.receive (message_t* msg, void* payload, uint8_t len) {
-        am_addr_t from;
-        ctp_routing_header_t* rcvBeacon;
-        bool congested;
-        if (len != sizeof (ctp_routing_header_t)) {
-          return msg;
+}
+event message_t* BeaconReceive.receive (message_t* msg, void* payload,
+                                        uint8_t len) {
+    am_addr_t from;
+    ctp_routing_header_t* rcvBeacon;
+    bool congested;
+    if (len != sizeof (ctp_routing_header_t)) {
+        return;
+    }
+    from = AMPacket.source (msg);
+    rcvBeacon = (ctp_routing_header_t*) payload;
+    congested = CtpRoutingPacket.getOption (msg, CTP_OPT_ECN);
+    if (rcvBeacon->parent != INVALID_ADDR) {
+        if (rcvBeacon->etx == 0) {
+            LinkEstimator.insertNeighbor (from);
+            LinkEstimator.pinNeighbor (from);
         }
-        from = AMPacket.source (msg);
-        rcvBeacon = (ctp_routing_header_t*) payload;
-        congested = CtpRoutingPacket.getOption (msg, CTP_OPT_ECN);
-        if (rcvBeacon->parent != INVALID_ADDR) {
-            if (rcvBeacon->etx == 0) {
-                LinkEstimator.insertNeighbor (from);
-                LinkEstimator.pinNeighbor (from);
-            }
-            routingTableUpdateEntry (from, rcvBeacon->parent, rcvBeacon->etx);
-            CtpInfo.setNeighborCongested (from, congested);
-        }
-        if (CtpRoutingPacket.getOption (msg, CTP_OPT_PULL)) {
-              resetInterval ();
-        }
-        return msg;
+        routingTableUpdateEntry (from, rcvBeacon->parent, rcvBeacon->etx);
+        CtpInfo.setNeighborCongested (from, congested);
+    }
+    if (CtpRoutingPacket.getOption (msg, CTP_OPT_PULL)) {
+          resetInterval ();
     }
 } 

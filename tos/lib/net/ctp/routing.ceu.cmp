@@ -2,7 +2,7 @@ event void go_start;
 event void go_stop;
 event void go_reset;
 _glb_state_is_root = 0;
-_routeInfoInit (&_glb_routeInfo);
+_routeInfoInit (& _glb_routeInfo);
 _routingTableInit ();
 par do
     loop do
@@ -36,8 +36,8 @@ par do
                     with
                         _task_updateRouteTask ();
                         var _message_t             msg;
-                        var _ctp_routing_header_t* pay;
-                        pay = _BeaconSend_getPayload (&msg, _BeaconSend_maxPayloadLength ());
+                        tmp _ctp_routing_header_t* pay =
+                            _BeaconSend_getPayload(& msg, _BeaconSend_maxPayloadLength ());
                         pay:options = 0;
                         if _CtpCongestion_isCongested () then
                             pay:options = pay:options | _CTP_OPT_ECN;
@@ -50,11 +50,10 @@ par do
                             pay:options = pay:options | _CTP_OPT_PULL;
                         else
                             pay:etx = _glb_routeInfo.etx +
-                                        _LinkEstimator_getLinkQuality (_glb_routeInfo.parent);
+                                _LinkEstimator_getLinkQuality (_glb_routeInfo.parent);
                         end
-                        var u8 eval = _BeaconSend_send (_AM_BROADCAST_ADDR,
-                                                        &msg,
-                                                        sizeof <_ctp_routing_header_t>);
+                        tmp u8 eval = _BeaconSend_send(_AM_BROADCAST_ADDR, & msg,
+                                                    sizeof <_ctp_routing_header_t>);
                         if eval == _SUCCESS then
                             await CTP_ROUTE_RADIO_SENDDONE;
                         else/if eval == _EOFF then
@@ -94,12 +93,12 @@ with
     end
 with
     loop do
-        var _message_t* msg = await CTP_ROUTE_RADIO_RECEIVE;
+        tmp _message_t* msg = await CTP_ROUTE_RADIO_RECEIVE;
         if _BeaconSend_payloadLength (msg) == sizeof <_ctp_routing_header_t> then
-            var _am_addr_t from = _AMPacket_source (msg);
-            var _ctp_routing_header_t* pay = <_ctp_routing_header_t*>
-                _BeaconSend_getPayload (msg, sizeof <_ctp_routing_header_t>);
-            var s8 congested? = _CtpRoutingPacket_getOption (msg, _CTP_OPT_ECN);
+            tmp _am_addr_t from = _AMPacket_source (msg);
+            tmp _ctp_routing_header_t* pay = _BeaconSend_getPayload (msg, 
+                sizeof<_ctp_routing_header_t>);
+            tmp s8 congested? = _CtpRoutingPacket_getOption (msg, _CTP_OPT_ECN);
             if pay:parent != _INVALID_ADDR then
                 if pay:etx == 0 then
                     _LinkEstimator_insertNeighbor (from);

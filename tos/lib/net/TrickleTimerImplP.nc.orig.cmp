@@ -1,143 +1,140 @@
-  typedef struct {
+typedef struct {
     uint16_t period;
     uint32_t time;
     uint32_t remainder;
     uint8_t count;
-  } trickle_t;
-  trickle_t trickles [count];
-  void adjustTimer ();
-  void generateTime (uint8_t id);
-  error_t Init.init () {
+} trickle_t;
+trickle_t trickles [count];
+void adjustTimer ();
+void generateTime (uint8_t id);
+error_t Init.init () {
     int i;
     for (i = 0; i < count; i++) {
-      trickles [i] .period = high;
-      trickles [i] .count = 0;
-      trickles [i] .time = 0;
-      trickles [i] .remainder = 0;
+        trickles [i] .period = high;
+        trickles [i] .count = 0;
+        trickles [i] .time = 0;
+        trickles [i] .remainder = 0;
     }
-      Pending.clearAll ();
-      Changed.clearAll ();
-    return SUCCESS;
-  }
-  error_t TrickleTimer.start [uint8_t id]() {
+    Pending.clearAll ();
+    Changed.clearAll ();
+}
+error_t TrickleTimer.start [uint8_t id]() {
     if (trickles [id] .time != 0) {
-      return EBUSY;
+        return;
     }
     trickles [id] .time = 0;
     trickles [id] .remainder = 0;
     trickles [id] .count = 0;
     generateTime (id);
-      Changed.set (id);
+    Changed.set (id);
     adjustTimer ();
-    return SUCCESS;
-  }
-  void TrickleTimer.stop [uint8_t id]() {
+}
+void TrickleTimer.stop [uint8_t id]() {
     trickles [id] .time = 0;
     trickles [id] .period = high;
     adjustTimer ();
-  }
-  void TrickleTimer.reset [uint8_t id]() {
+}
+void TrickleTimer.reset [uint8_t id]() {
     trickles [id] .period = low;
     trickles [id] .count = 0;
     if (trickles [id] .time != 0) {
-	Changed.set (id);
-      trickles [id] .time = 0;
-      trickles [id] .remainder = 0;
-      generateTime (id);
-      adjustTimer ();
+        Changed.set (id);
+        trickles [id] .time = 0;
+        trickles [id] .remainder = 0;
+        generateTime (id);
+        adjustTimer ();
     }
-  }
-  void TrickleTimer.incrementCounter [uint8_t id]() {
+}
+void TrickleTimer.incrementCounter [uint8_t id]() {
     trickles [id] .count++;
-  }
-  void timerTask () {
+}
+void timerTask () {
     uint8_t i;
     for (i = 0; i < count; i++) {
-      bool fire = FALSE;
+        bool fire = FALSE;
 	if (Pending.get (i)) {
-	  Pending.clear (i);
-	  fire = TRUE;
+        Pending.clear (i);
+        fire = TRUE;
 	}
-      if (fire) {
-	TrickleTimer.fired [i]();
-	timerTask ();
-	return;
-      }
+    if (fire) {
+        TrickleTimer.fired [i]();
+        timerTask ();
     }
-  }
-  event void Timer.fired () {
+}
+event void Timer.fired () {
     uint8_t i;
     uint32_t dt = Timer.getdt ();
     for (i = 0; i < count; i++) {
-      uint32_t remaining = trickles [i] .time;
-      if (remaining != 0) {
-	remaining -= dt;
-	if (remaining == 0) {
-	  if (trickles [i] .count < k) {
-	      Pending.set (i);
-	    timerTask ();
-	  }
-	  Changed.set (i);
-	  generateTime (i);
-	  trickles [i] .count = 0;
-	}
-      }
+        uint32_t remaining = trickles [i] .time;
+        if (remaining != 0) {
+            remaining -= dt;
+            if (remaining == 0) {
+                if (trickles [i] .count < k) {
+                    Pending.set (i);
+                    timerTask ();
+                }
+                Changed.set (i);
+                generateTime (i);
+                trickles [i] .count = 0;
+            }
+        }
     }
     adjustTimer ();
-  }
-    void adjustTimer () {
-        uint8_t i;
-        uint32_t lowest = 0;
-        bool set = FALSE;
-        uint32_t elapsed = (Timer.getNow () - Timer.gett0 ());
-        for (i = 0; i < count; i++) {
-            uint32_t timeRemaining = trickles [i] .time;
-            if (timeRemaining == 0) {
-                continue;
-            }
-                if (! Changed.get (i)) {
-                    if (timeRemaining > elapsed) {
-                        timeRemaining -= elapsed;
-                        trickles [i] .time -= elapsed;
-                    }
-                    else {
-                        timeRemaining = 1;
-                        trickles [i] .time = 1;
-                    }
-                }
-                else {
-                    Changed.clear (i);
-                }
-            if (! set) {
-                lowest = timeRemaining;
-                set = TRUE;
-            }
-            else if (timeRemaining < lowest) {
-                lowest = timeRemaining;
-            }
+}
+void adjustTimer () {
+    uint8_t i;
+    uint32_t lowest = 0;
+    bool set = FALSE;
+    uint32_t elapsed = (Timer.getNow () - Timer.gett0 ());
+    for (i = 0; i < count; i++) {
+        uint32_t timeRemaining = trickles [i] .time;
+        if (timeRemaining == 0) {
+            continue;
         }
-        if (set) {
-            uint32_t timerVal = lowest;
-            Timer.startOneShot (timerVal);
+        if (! Changed.get (i)) {
+            if (timeRemaining > elapsed) {
+                timeRemaining -= elapsed;
+                trickles [i] .time -= elapsed;
+            }
+            else {
+                timeRemaining = 1;
+                trickles [i] .time = 1;
+            }
         }
         else {
-            Timer.stop ();
+            Changed.clear (i);
+        }
+        if (! set) {
+            lowest = timeRemaining;
+            set = TRUE;
+        }
+        else if (timeRemaining < lowest) {
+            lowest = timeRemaining;
         }
     }
-  void generateTime (uint8_t id) {
+    if (set) {
+        uint32_t timerVal = lowest;
+        Timer.startOneShot (timerVal);
+    }
+    else {
+        Timer.stop ();
+    }
+}
+void generateTime (uint8_t id) {
     uint32_t newTime;
     uint16_t rval;
     if (trickles [id] .time != 0) {
-      trickles [id] .period *= 2;
-      if (trickles [id] .period > high) {
-	trickles [id] .period = high;
-      }
+        trickles [id] .period *= 2;
+        if (trickles [id] .period > high) {
+            trickles [id] .period = high;
+        }
     }
     trickles [id] .time = trickles [id] .remainder;
     newTime = trickles [id] .period;
     newTime = newTime << (scale - 1);
     rval = Random.rand16 () % (trickles [id] .period << (scale - 1));
     newTime += rval;
-    trickles [id] .remainder = (((uint32_t) trickles [id] .period) << scale) - newTime;
+    trickles [id] .remainder = (((uint32_t) trickles [id] .period) << scale)
+                                    - newTime;
     trickles [id] .time += newTime;
-  }
+}
