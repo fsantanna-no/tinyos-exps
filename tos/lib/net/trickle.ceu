@@ -9,13 +9,18 @@ input  int  TRICKLE_STOP;
 input  int  TRICKLE_RESET;
 input  int  TRICKLE_INC;
 
-@define(AWAIT, `loop do id_ = await $1; if id_ == this.id then break; end end')
+@define(AWAIT, `
+loop do
+    tmp int id_ = await $1;
+    if id_ == this.id then
+        break;
+    end
+end
+')
 
 class Trickle with
     var u8 id;
 do
-// TODO: id_
-    var u8 id_;
     loop do
         var u16 tau = _TRICKLE_TAU_H;
 
@@ -47,8 +52,7 @@ do
                             count = count + 1;
                         end
                     with
-// TODO: dt
-                        var u16 dt_ = (tau/2) + (_Random_rand16()+1) % (tau/2);
+                        tmp u16 dt_ = (tau/2) + (_Random_rand16()+1) % (tau/2);
                         await (dt_ << (_TRICKLE_SCALE-1)) ms;
                         if count < _TRICKLE_K then
                             emit TRICKLE_FIRED(this.id);

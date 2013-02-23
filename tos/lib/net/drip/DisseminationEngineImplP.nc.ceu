@@ -33,8 +33,14 @@ implementation
         NUM_DISSEMINATORS = uniqueCount("DisseminationTimerC.TrickleTimer")
     };
 
-    #define DisseminatorControl_start(i) \
-                call DisseminatorControl.start[i]()
+    bool m_running;
+
+/*
+    #define DisseminationCache_start(i) \
+                signal DisseminationCache.start[i]()
+    #define DisseminationCache_stop(i) \
+                signal DisseminationCache.stop[i]()
+*/
     #define TrickleTimer_start(i) \
                 call TrickleTimer.start[i]()
     #define TrickleTimer_stop(i) \
@@ -54,31 +60,44 @@ implementation
     #define ProbeAMSend_payloadLength(msg) \
                 call ProbeAMSend.payloadLength(msg)
     #define ProbeAMSend_send(a,b,c) \
-                call ProbeAMSend.send(a,b,c)
-    #define AMSend_send(a,b,c) \
-                call AMSend.send(a,b,c)
+                if (m_running)      \
+                    call ProbeAMSend.send(a,b,c)
+    #define AMSend_send(a,b,c)      \
+                if (m_running)      \
+                    call AMSend.send(a,b,c)
     #define AMSend_maxPayloadLength(a) \
                 call AMSend.maxPayloadLength(a)
-    #define DisseminatorControl_stop(i) \
-                call DisseminatorControl.stop[i]()
 
     #include "_ceu_defs.h"
     #include "_ceu_code.cceu"
 
     command error_t StdControl.start() {
-        return ! ceu_go_init();
+        uint8_t i;
+        ceu_go_init();
+        for ( i = 0; i < NUM_DISSEMINATORS; i++ ) {
+            call DisseminatorControl.start[ i ]();
+        }
+        m_running = TRUE;
+        return SUCCESS;
     }
 
     command error_t StdControl.stop() {
-        return ! ceu_go_event(IN_DRIP_STOP, NULL);
+        uint8_t i;
+        for ( i = 0; i < NUM_DISSEMINATORS; i++ ) {
+          call DisseminatorControl.stop[ i ]();
+        }
+        m_running = FALSE;
+        return SUCCESS;
     }
 
     event error_t DisseminationCache.start[ uint16_t key ]() {
-        return ! ceu_go_event(IN_DRIP_KEY_START, &key);
+        ceu_go_event(IN_DRIP_KEY_START, &key);
+        return SUCCESS;
     }
 
     event error_t DisseminationCache.stop[ uint16_t key ]() {
-        return ! ceu_go_event(IN_DRIP_KEY_STOP, &key);
+        ceu_go_event(IN_DRIP_KEY_STOP, &key);
+        return SUCCESS;
     }
 
     event void DisseminationCache.newData[ uint16_t key ]() {
@@ -100,6 +119,7 @@ implementation
     event message_t* Receive.receive( message_t* msg, 
 				    void* payload, 
 				    uint8_t len ) {
+        if (!m_running) return FALSE;
         ceu_go_event(IN_DRIP_DATA_RECEIVE, msg);
         return msg;
     }
@@ -107,6 +127,7 @@ implementation
     event message_t* ProbeReceive.receive( message_t* msg, 
 					 void* payload, 
 					 uint8_t len) {
+        if (!m_running) return FALSE;
         ceu_go_event(IN_DRIP_PROBE_RECEIVE, msg);
         return msg;
     }

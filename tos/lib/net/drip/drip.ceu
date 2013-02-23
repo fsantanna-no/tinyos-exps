@@ -1,7 +1,7 @@
 @define(NUM_DRIPS, 2)    // TODO: manual
 
-C nohold _DisseminatorControl_start(),
-         _DisseminatorControl_stop(),
+C nohold _DisseminationCache_start(),
+         _DisseminationCache_stop(),
          _TrickleTimer_start(),
          _TrickleTimer_stop(),
          _TrickleTimer_reset(),
@@ -27,8 +27,8 @@ C _message_t=52,
 C constant _DISSEMINATION_SEQNO_UNKNOWN,
            _AM_BROADCAST_ADDR;
 
-input void DRIP_START;
-input void DRIP_STOP;
+//input void DRIP_START;
+//input void DRIP_STOP;
 input int  DRIP_SENDDONE;
 input int  DRIP_KEY_START;
 input int  DRIP_KEY_STOP;
@@ -57,30 +57,36 @@ var Drip[NUM_DRIPS] drips;
  * so it can never overwrite the buffer.
  */
 
+
+/*
 loop do
     par/or do
         await DRIP_START;       // TODO: global await
         loop i, NUM_DRIPS do
             drips[i].key = i;
-            _DisseminatorControl_start(i);
+            _DisseminationCache_start(i);
         end
     with
         await DRIP_STOP;        // TODO: global await
         loop i, NUM_DRIPS do
-            _DisseminatorControl_stop(i);
+            _DisseminationCache_stop(i);
         end
     end
 end
+*/
 
 // TODO: break in multiple for line comparison
-@define(AWAIT, `loop do key_ = await $1; if key_ == this.key then break; end end')
+@define(AWAIT, `
+loop do
+    tmp u16 key_ = await $1;
+    if key_ == this.key then
+        break;
+    end
+end')
 
 class Drip with
     var u16 key;
 do
-// TODO: key_
-    var u16 key_;
-    var u8 len_;
     event u8 send;
     var _message_t m_buf;
 
@@ -105,12 +111,12 @@ do
             end
         with
             loop do
-                var _message_t* msg = await DRIP_DATA_RECEIVE;
-                var _dissemination_message_t* pay = _ProbeAMSend_getPayload(msg,
+                tmp _message_t* msg = await DRIP_DATA_RECEIVE;
+                tmp _dissemination_message_t* pay = _ProbeAMSend_getPayload(msg,
                                                         sizeof<_dissemination_message_t>);
 
                 if pay and (pay:key==this.key) then
-                    var u32 seqno = _DisseminationCache_requestSeqno(this.key);
+                    tmp u32 seqno = _DisseminationCache_requestSeqno(this.key);
 
                     if seqno == pay:seqno then          // same seqno: inc timer
                         _TrickleTimer_incrementCounter(this.key);
@@ -126,6 +132,7 @@ do
                             pay:seqno!=_DISSEMINATION_SEQNO_UNKNOWN )
                     then
                         _TrickleTimer_reset(this.key);
+                        tmp u8 len_;
                         _DisseminationCache_requestData(this.key, &len_);
                         _DisseminationCache_storeData(this.key, pay:data, 
                             len_ - sizeof<_dissemination_message_t>,
@@ -136,19 +143,20 @@ do
         with
             loop do
                 await send;
-                var _dissemination_message_t* pay = _ProbeAMSend_getPayload(&m_buf,
+                tmp _dissemination_message_t* pay = _ProbeAMSend_getPayload(&m_buf,
                                                         sizeof<_dissemination_message_t>);
                 if (pay != null) then
                     pay:key = this.key;
                     pay:seqno = _DisseminationCache_requestSeqno(this.key);
 
                     // send metadata or data
+                    tmp u8 len_;
                     if send==0 or pay:seqno==_DISSEMINATION_SEQNO_UNKNOWN then
                         _ProbeAMSend_send(_AM_BROADCAST_ADDR, &m_buf,
                             sizeof<_dissemination_probe_message_t> );
                         len_ = 0;
                     else
-                        var void* obj;
+                        tmp void* obj;
                         finalize
                             obj = _DisseminationCache_requestData(this.key, &len_);
                         with

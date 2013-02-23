@@ -121,42 +121,56 @@ implementation
     #include "_ceu_code.cceu"
 
     command error_t Init.init() {
+atomic {
         ceu_go_init();
         return SUCCESS;
+}
     }
 
     command error_t StdControl.start() {
+atomic {
         ceu_go_event(IN_CC_RECV_START, NULL);
         return SUCCESS;
+}
     }
 
     command error_t StdControl.stop() {
+atomic {
         ceu_go_event(IN_CC_RECV_STOP, NULL);
         return SUCCESS;
+}
     }
 
     async event void InterruptFIFOP.fired() {
+atomic {
         ceu_go_event(IN_CC_RECV_FIFOP, NULL);
+}
     }
 
     event void SpiResource.granted() {
+atomic {
         ceu_go_event(IN_CC_RECV_SPI_GRANTED, NULL);
+}
     }
 
     async event void RXFIFO.readDone( uint8_t* rx_buf, uint8_t rx_len,
                                       error_t error ) {
+atomic {
         cc_recv_readdone_t t = { rx_buf, rx_len, error };
         ceu_go_event(IN_CC_RECV_READDONE, &t);
+}
     }
 
 ///////////////////////////
 
   command bool PacketIndicator.isReceiving() {
+atomic {
     bool receiving;
     atomic {
       receiving = receivingPacket;
     }
     return receiving;
+}
   }
   
   async event void RXFIFO.writeDone( uint8_t* tx_buf, uint8_t tx_len, error_t 
@@ -167,6 +181,7 @@ implementation
   }
  
   bool passesAddressCheck(message_t *msg) {
+atomic {
     cc2420_header_t *header = call CC2420PacketBody.getHeader( msg );
     int mode = (header->fcf >> IEEE154_FCF_DEST_ADDR_MODE) & 3;
     ieee_eui64_t *ext_addr;  
@@ -186,21 +201,26 @@ implementation
       /* reject frames with either no address or invalid type */
       return FALSE;
     }
+}
   }
 
   async command void CC2420Receive.sfd( uint32_t time ) {
+atomic {
     if ( m_timestamp_size < TIMESTAMP_QUEUE_SIZE ) {
       uint8_t tail =  ( ( m_timestamp_head + m_timestamp_size ) % 
                         TIMESTAMP_QUEUE_SIZE );
       m_timestamp_queue[ tail ] = time;
       m_timestamp_size++;
     }
+}
   }
 
   async command void CC2420Receive.sfd_dropped() {
+atomic {
     if ( m_timestamp_size ) {
       m_timestamp_size--;
     }
+}
   }
 
 }
