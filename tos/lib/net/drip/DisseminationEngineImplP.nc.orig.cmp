@@ -87,4 +87,4 @@ event message_t* ProbeReceive.receive (message_t* msg, void* payload,
         DISSEMINATION_SEQNO_UNKNOWN) {
         sendObject (dpMsg->key);
     }
-  }
+}

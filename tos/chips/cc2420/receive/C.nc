@@ -27,17 +27,43 @@ implementation {
   uint16_t c_recv = 0;
 
     bool END = FALSE;
+ 
+    #define DT_SEND  100    // 100ms
+    #define DT_A1    150    //  45ms
+    #define DT_A2    300    //  90ms
+    #define DT_W1   1000    //   1ms
+    #define DT_W2   3000    //   3ms
+    #undef SYNC
 
 /*
-    task void T1 ();
-    task void T2 ();
-    task void T3 ();
+    #define DT_SEND  100    // 100ms
+    #define DT_A1    250    //  75ms
+    #define DT_A2    600    // 180ms
+    #define DT_W1   1000    //   1ms
+    #define DT_W2   3000    //   3ms
+    ORIG: 798 // 1140
+    CEUS: 798 // 1140
+
+    #define DT_SEND  100    // 100ms
+    #define DT_A1    150    //  45ms
+    #define DT_A2    300    //  90ms
+    #define DT_W1   1000    //   1ms
+    #define DT_W2   3000    //   3ms
+    ORIG: 798 // 1297
+    CEUS: 798 // 1294
+
+    #define DT_SEND   50    //  50ms
+    #define DT_A1    150    //  45ms
+    #define DT_A2    300    //  90ms
+    #define DT_W1   1000    //   1ms
+    #define DT_W2   3000    //   3ms
+    ORIG: 766 // 2244
+    ORIG: 751 // 2239
 */
-  
     event void Boot.booted() {
         call AMControl.start();
-        call Alarm1.start(50);      // ~10ms
-        call Alarm2.start(100);     // ~30ms
+        call Alarm1.start(DT_A1);
+        call Alarm2.start(DT_A2);
         call Leds.set(0);
 /*
         post T1();
@@ -50,19 +76,7 @@ implementation {
 
     event void AMControl.startDone(error_t err) {
         if (err == SUCCESS) {
-            call MilliTimer.startPeriodic(100);
-
-// ORIG: 2107 // 171.180   // 12109
-
-// SYNC: 2096 // 3.167.0   // 11986
-
-// CEUS: 1851 // 54.166.0  // 11852
-
-// 1 mote
-// ORIG: 774  // 197.105.1 // 12159
-// SYNC: 777  // 31.65.1   // 12023
-// CEUS: 761  // 203.51.1  // 11970
-
+            call MilliTimer.startPeriodic(DT_SEND);
         }
     else {
         call AMControl.start();
@@ -73,61 +87,39 @@ implementation {
     // do nothing
   }
 
-/*
-    uint32_t C = 0;
-    task void T1 () {
-atomic
-{
-        if (END) return;
-        C++;
-        post T1();
-}
-    }
-    task void T2 () {
-atomic
-{
-        if (END) return;
-        C++;
-        post T2();
-}
-    }
-    task void T3 () {
-atomic
-{
-        if (END) return;
-        C++;
-        post T3();
-}
-    }
-*/
-
     uint16_t D = 0;
     async event void Alarm1.fired() {
+#ifdef SYNC
 atomic
+#endif
 {
         if (END) return;
-        call BusyWait.wait(1500);
-        call Alarm1.start(50);
+        call BusyWait.wait(DT_W1);
+        call Alarm1.start(DT_A1);
         atomic {
-            D++;
+            D++; D%=3200;
         }
 }
     }
     async event void Alarm2.fired() {
+#ifdef SYNC
 atomic
+#endif
 {
         if (END) return;
-        call BusyWait.wait(3000);
-        call Alarm2.start(100);
+        call BusyWait.wait(DT_W2);
+        call Alarm2.start(DT_A2);
         atomic {
-            D++;
+            D++; D%=3200;
         }
 }
     }
 
     event void MilliTimer.fired()
     {
+#ifdef SYNC
 atomic
+#endif
 {
         c_send++;
         if (c_send > 799) {
@@ -167,7 +159,9 @@ atomic
     int R = 0;
     event message_t* Receive.receive(message_t* bufPtr, void* payload,
                                      uint8_t len) {
+#ifdef SYNC
 atomic
+#endif
 {
         radio_count_msg_t* rcm = (radio_count_msg_t*) payload;
 
@@ -186,7 +180,9 @@ atomic
     }
 
   event void AMSend.sendDone(message_t* bufPtr, error_t error) {
+#ifdef SYNC
 atomic
+#endif
 {
     if (&packet == bufPtr) {
       locked = FALSE;

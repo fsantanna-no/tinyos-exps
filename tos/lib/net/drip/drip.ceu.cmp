@@ -74,12 +74,7 @@ do
                             sizeof <_dissemination_probe_message_t>);
                         len_ = 0;
                     else
-                        tmp void* obj;
-                        finalize
-                            obj = _DisseminationCache_requestData (this.key, & len_);
-                        with
-                            nothing;    // obj < global
-                        end
+                        tmp void* obj = _DisseminationCache_requestData (this.key, & len_);
                         if (len_ + sizeof <_dissemination_message_t>) >
                             _AMSend_maxPayloadLength () then
                             len_ = _AMSend_maxPayloadLength () -
