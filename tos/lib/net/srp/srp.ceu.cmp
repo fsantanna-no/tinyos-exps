@@ -1,0 +1,99 @@
+interface Global with
+    event _srp_forward_t* go_forward;
+end
+event _srp_forward_t* go_forward;
+class Client with
+    var u8 id;
+do
+    var u8 seqno = 0;
+    loop do
+        tmp _srp_send_t* snd;
+        loop do
+            snd = await SRP_SEND;
+            if snd:client == this.id then
+                break;
+            end
+        end
+        tmp _nx_am_addr_t [SRP_MAX_PATHLEN] nxPath;
+        loop i, snd:pathLen do
+            nxPath [i] = snd:path [i];
+        end
+        _SourceRoutePacket_setRoute (snd:msg, nxPath, snd:pathLen);
+        tmp _sr_header_t* hdr = _getSRPHeader (snd:msg);
+        hdr:payload_id = _SourceRouteId_fetch (this.id);
+        hdr:seqno      = seqno;
+        hdr:hops_left  = snd:pathLen - 2;
+        seqno = seqno + 1;
+        tmp _srp_senddone_t* done;
+        loop do
+            var _message_t* snd_msg = snd:msg;
+            _SubSend_send (_SourceRoutePacket_getNextHop (snd:msg),
+                           snd:msg, snd:len + sizeof <_sr_header_t>)
+            done = await SRP_SENDDONE;
+            if done:msg == snd_msg then
+                break;
+            end
+        end
+        _SourceRouteSend_sendDone (this.id, snd:msg, done:error)
+    end
+end
+class Forwarder with
+    var _message_t* msg;
+do
+    loop do
+        tmp _srp_forward_t* fwd = await global:go_forward;
+        if fwd:gotcha then
+            continue;
+        end
+        fwd:gotcha = 1;
+            msg = * (fwd:msg);
+        * (fwd:msg) = msg;
+        tmp _srp_senddone_t* done;
+        tmp u8 len = fwd:len;
+        loop do
+            _SubSend_send (_SourceRoutePacket_getNextHop (msg),
+                           msg, len)
+            done = await SRP_SENDDONE;
+            if done:msg == msg then
+                break;
+            end
+        end
+    end
+end
+var _message_t [FORWARD_COUNT] msgs_buf;
+var _message_t* [FORWARD_COUNT] msgs;
+loop i, FORWARD_COUNT do
+    msgs [i] = & msgs_buf [i];
+end
+loop do
+    await SRP_START;
+    par/or do
+        await SRP_STOP;
+    with
+        var Client   [CLIENT_COUNT]  clients;
+        var Forwarder [FORWARD_COUNT] forwarders;
+        loop i, CLIENT_COUNT do
+            clients [i] .id = i;
+        end
+        loop i, FORWARD_COUNT do
+            forwarders [i] .msg = msgs [i];
+        end
+        loop do
+            tmp _srp_receive_t* recv = await SRP_RECEIVE;
+            tmp _sr_header_t* hdr = _getSRPHeader (* (recv:msg));
+            if hdr:hops_left == 0 then
+                _Receive_receive (hdr:payload_id, * (recv:msg),
+                                  _SourceRouteSend_getPayload (0, * (recv:msg),
+                                        recv:len - sizeof <_sr_header_t>),
+                                  recv:len - sizeof <_sr_header_t>);
+            else
+                hdr:hops_left = hdr:hops_left - 1;
+                tmp _srp_forward_t fwd;
+                    fwd.msg    = recv:msg;
+                    fwd.len    = recv:len;
+                    fwd.gotcha = 0;
+                emit go_forward = & fwd;
+            end
+        end
+    end
+end

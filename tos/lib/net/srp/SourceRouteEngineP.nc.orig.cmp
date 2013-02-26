@@ -1,0 +1,129 @@
+enum {
+    S_OFF = 0,
+    S_IDLE = 1,
+    S_SENDING = 2,
+    S_ERROR = 3,
+};
+enum{
+    SC_IDLE = 0,
+    SC_SENDING = 1,
+};
+uint8_t state = S_OFF;
+uint8_t seqno;
+srf_queue_entry_t clientEntries [CLIENT_COUNT];
+uint8_t clientStatus [CLIENT_COUNT];
+error_t Init.init () {
+    uint8_t i;
+    for (i = 0; i < CLIENT_COUNT; i ++) {
+        clientEntries [i] .client = i;
+    }
+}
+void sendTask () {
+    srf_queue_entry_t* qe;
+    error_t err;
+    if (state == S_IDLE) {
+        if (SendQueue.size () == 0) {
+            return;
+        } else {
+            state = S_SENDING;
+            qe =  SendQueue.head ();
+            err = SubSend.send (SourceRoutePacket.getNextHop (qe->msg),
+                                qe->msg, qe->len);
+            if (err != SUCCESS) {
+                state = S_IDLE;
+                if (qe->client != FORWARD_CLIENT) {
+                    clientStatus [qe->client] = SC_IDLE;
+                    signal SourceRouteSend.sendDone [qe->client] (qe->msg, FAIL);
+                }
+                SendQueue.dequeue ();
+            }
+        }
+    }
+}
+error_t SourceRouteSend.send [uint8_t client] (am_addr_t *path,
+                             uint8_t pathLen, message_t* msg, uint8_t len) {
+    sr_header_t* hdr;
+    nx_am_addr_t nxPath [SRP_MAX_PATHLEN];
+    uint8_t i;
+    if (state == S_OFF) {
+        return;
+    }
+    for (i = 0; i < pathLen; i ++) {
+        nxPath [i] = path [i];
+    }
+    SourceRoutePacket.setRoute (msg, nxPath, pathLen);
+    hdr = getSRPHeader (msg);
+    hdr->payload_id =  SourceRouteId.fetch[client]();
+    hdr->seqno = seqno ++;
+    hdr->hops_left = pathLen - 2;
+    clientStatus [client] = SC_SENDING;
+    if (SendQueue.enqueue (& clientEntries [client]) == SUCCESS) {
+        clientEntries [client] .msg = msg;
+        clientEntries [client] .len = len + sizeof (sr_header_t);
+        sendTask ();
+        return;
+    } else {
+        clientStatus [client] = SC_IDLE;
+        return;
+    }
+}
+event void SubSend.sendDone (message_t* msg, error_t err) {
+    srf_queue_entry_t* qe;
+    if (state != S_SENDING) {
+        state = S_ERROR;
+    }  else {
+        state = S_IDLE;
+        qe =  SendQueue.dequeue ();
+        if (qe->msg != msg) {
+            state = S_ERROR;
+            return;
+        }
+        if (!  SendQueue.empty ()) {
+            sendTask ();
+        }
+        if (qe->client == FORWARD_CLIENT) {
+            MessagePool.put (msg);
+            QEntryPool.put (qe);
+        } else {
+            clientStatus [qe->client] = SC_IDLE;
+            signal SourceRouteSend.sendDone [qe->client] (msg, err);
+        }
+    }
+}
+event message_t* SubReceive.receive (message_t* msg, void* payload,
+                                     uint8_t len) {
+    sr_header_t* hdr;
+    srf_queue_entry_t* qe;
+    hdr = getSRPHeader (msg);
+    if (hdr->hops_left == 0) {
+        return signal Receive.receive [hdr->payload_id] (msg, 
+        SourceRouteSend.getPayload [0] (msg, len - sizeof (sr_header_t)),
+                                        len - sizeof (sr_header_t));
+    } else {
+        if (SendQueue.size () < SendQueue.maxSize () && !  MessagePool.empty ()
+        && ! QEntryPool.empty ()) {
+            hdr->hops_left --;
+            qe = QEntryPool.get ();
+            qe->client = FORWARD_CLIENT;
+            qe->len = len;
+            qe->msg = msg;
+            SendQueue.enqueue (qe);
+            sendTask ();
+            return MessagePool.get ();
+        } else {
+            return msg;
+        }
+    }
+}
+error_t StdControl.start () {
+    state = S_IDLE;
+}
+error_t StdControl.stop () {
+    state = S_OFF;
+}
+event void SubControl.startDone (error_t error) {
+    state = S_IDLE;
+}
+event void SubControl.stopDone (error_t error) {
+    state = S_OFF;
+}

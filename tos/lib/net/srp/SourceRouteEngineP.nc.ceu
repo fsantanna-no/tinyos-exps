@@ -1,0 +1,211 @@
+#include "SourceRouteEngine.h"
+
+module SourceRouteEngineP {
+  provides {
+    interface StdControl;
+    interface SourceRouteSend[uint8_t client];
+    interface SourceRoutePacket;
+    interface Receive[sourceroute_id_t id];
+    interface Init;
+  }
+  uses {
+    interface SourceRouteId[uint8_t client];
+    interface AMSend as SubSend;
+    interface Receive as SubReceive;
+    
+    interface SplitControl as SubControl;
+  }
+}
+implementation
+{
+    typedef int64_t  s64;
+    typedef uint64_t u64;
+    typedef int32_t  s32;
+    typedef uint32_t u32;
+    typedef int16_t  s16;
+    typedef uint16_t u16;
+    typedef int8_t    s8;
+    typedef uint8_t   u8;
+
+    typedef struct {
+        message_t*  msg;
+        am_addr_t*  path;
+        u8          client;
+        u8          pathLen;
+        u8          len;
+    } srp_send_t;
+
+    typedef struct {
+        message_t* msg;
+        error_t    error;
+    } srp_senddone_t;
+
+    typedef struct {
+        message_t** msg;
+        u8          len;
+    } srp_receive_t;
+
+    sr_header_t* getSRPHeader(message_t* msg);
+    #define SourceRouteId_fetch(a) \
+        call SourceRouteId.fetch[a]()
+    #define SourceRoutePacket_getNextHop(a) \
+        call SourceRoutePacket.getNextHop(a)
+    #define SourceRouteSend_getPayload(a,b,c) \
+        call SourceRouteSend.getPayload[a](b,c)
+    #define Receive_receive(a,b,c,d) \
+        signal Receive.receive[a](b,c,d)
+    #define SourceRoutePacket_setRoute(a,b,c) \
+        call SourceRoutePacket.setRoute(a,b,c)
+    #define SourceRouteSend_sendDone(a,b,c) \
+        signal SourceRouteSend.sendDone[a](b,c)
+    #define SubSend_send(a,b,c) \
+        call SubSend.send(a,b,c)
+
+    #include "_ceu_defs.h"
+    #include "_ceu_code.cceu"
+
+    command error_t Init.init () {
+        ceu_go_init();
+        return SUCCESS;
+    }
+
+    command error_t StdControl.start () {
+        ceu_go_event(IN_SRP_START, NULL);
+        return SUCCESS;
+    }
+    event void SubControl.startDone (error_t error) {
+        ceu_go_event(IN_SRP_START, NULL);
+    }
+
+    command error_t StdControl.stop () {
+        ceu_go_event(IN_SRP_STOP, NULL);
+        return SUCCESS;
+    }
+    event void SubControl.stopDone (error_t error) {
+        ceu_go_event(IN_SRP_STOP, NULL);
+    }
+
+    command error_t SourceRouteSend.send [uint8_t client]
+                                         (am_addr_t *path, uint8_t pathLen,
+                                          message_t* msg, uint8_t len)
+    {
+        srp_send_t t = { msg, path, client, pathLen, len };
+        ceu_go_event(IN_SRP_SEND, &t);
+        return SUCCESS;
+    }
+
+    event void SubSend.sendDone (message_t* msg, error_t err) {
+        srp_senddone_t t = { msg, err };
+        ceu_go_event(IN_SRP_SENDDONE, &t);
+    }
+
+    event message_t* SubReceive.receive (message_t* msg,
+                                         void* payload, uint8_t len)
+    {
+        srp_receive_t t = { &msg, len };
+        ceu_go_event(IN_SRP_RECEIVE, &t);
+        return *t.msg;
+    }
+
+///////////////////////////////////////////////////////////////////////////////
+
+  command void* SourceRouteSend.getPayload[uint8_t client](message_t* msg, 
+    uint8_t len) {
+    if (len > call SourceRouteSend.maxPayloadLength[client]()) {
+      return NULL;
+    } else {
+      return call SubSend.getPayload(msg, len + sizeof(sr_header_t)) + sizeof(sr_header_t);
+    }
+  }
+
+  command uint8_t SourceRouteSend.maxPayloadLength[uint8_t client]() {
+    return call SubSend.maxPayloadLength() - sizeof(sr_header_t);
+  }
+
+  command error_t SourceRouteSend.cancel[uint8_t client](message_t* msg) {
+    //TODO: SourceRouteSend.cancel: find msg in queue and remove it if possible
+    return FAIL;
+  }
+
+  /**
+   * SourceRoutePacket commands
+   */
+  sr_header_t* getSRPHeader(message_t* msg) {
+    sr_header_t* ret = (sr_header_t*)call SubSend.getPayload(msg, sizeof(sr_header_t));
+    return ret;
+  }
+
+  command error_t SourceRoutePacket.clearRoute(message_t *msg) {
+    //NOTE that if the route goes in the footer or is variable-length, we can't safely overwrite the values in it (space might be used for payload). 
+    memset(getSRPHeader(msg)->route, 0, sizeof(nx_am_addr_t)*SRP_MAX_PATHLEN);
+    getSRPHeader(msg)->sr_len = 0; 
+    return SUCCESS;
+  }
+
+  command error_t SourceRoutePacket.setRoute(message_t *msg, nx_am_addr_t *path, uint8_t len) {
+    sr_header_t* hdr = getSRPHeader(msg);
+    hdr -> sr_len = len;
+    memcpy(hdr->route, path, len * sizeof(nx_am_addr_t));
+    return FAIL;
+  }
+
+  command nx_am_addr_t* SourceRoutePacket.getRoute(message_t *msg) {
+    return getSRPHeader(msg) -> route;
+  }
+  
+  command uint8_t SourceRoutePacket.getRouteLen(message_t *msg) {
+    return getSRPHeader(msg) -> sr_len;
+  }
+
+  command error_t SourceRoutePacket.setRouteLen(message_t *msg, uint8_t len) {
+    getSRPHeader(msg) -> sr_len = len;
+    return SUCCESS;
+  }
+
+  //NOTE: The hops_left field is decremented when the packet is enqueued (i.e. at forward, not at sendTask)
+  //NOTE: When a packet reaches the destination, hops_left is 0.
+  //NOTE: So, getNextHop should return the destination addr when hops_left is 0.
+  command am_addr_t SourceRoutePacket.getNextHop(message_t *msg) {
+    sr_header_t* hdr = getSRPHeader(msg);
+    return (call SourceRoutePacket.getRoute(msg))[hdr->sr_len - 1 - hdr->hops_left ];
+  }
+
+  command am_addr_t SourceRoutePacket.getDest(message_t *msg) {
+    sr_header_t* hdr = getSRPHeader(msg);
+    return (call SourceRoutePacket.getRoute(msg))[hdr->sr_len - 1];
+  }
+  
+  command am_addr_t SourceRoutePacket.getSource(message_t *msg) {
+    sr_header_t* hdr = getSRPHeader(msg);
+    return (call SourceRoutePacket.getRoute(msg))[0];
+  }
+  
+  command uint8_t SourceRoutePacket.getHopsLeft(message_t *msg) {
+    sr_header_t* hdr = getSRPHeader(msg);
+    return hdr->hops_left ;
+  }
+
+  command error_t SourceRoutePacket.setHopsLeft(message_t *msg, uint8_t hopsLeft) {
+    getSRPHeader(msg) -> hops_left = hopsLeft;
+    return SUCCESS;
+  }
+  
+  command uint8_t SourceRoutePacket.getSeqNo(message_t *msg) {
+    return getSRPHeader(msg) -> seqno;
+  }
+
+  /** Defaults
+   */
+  default event void SourceRouteSend.sendDone[uint8_t client](message_t *msg, error_t error) {
+  }
+	  
+  default event message_t *
+  Receive.receive[sourceroute_id_t sourcerouteid](message_t *msg, void *payload, uint8_t len) {
+    return msg;
+  }
+
+  default command sourceroute_id_t SourceRouteId.fetch[uint8_t client]() {
+    return 0;
+  }
+
+}
