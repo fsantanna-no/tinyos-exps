@@ -1,5 +1,12 @@
 message_t m_buf;
+bool m_running;
 bool m_bufBusy;
+error_t StdControl.start () {
+    m_running = TRUE;
+}
+error_t StdControl.stop() {
+    m_running = FALSE;
+}
 event error_t DisseminationCache.start [uint16_t key]() {
     error_t result = TrickleTimer.start [key]();
     TrickleTimer.reset [key]();
@@ -29,6 +36,9 @@ void sendObject (uint16_t key) {
     void* object;
     uint8_t objectSize = 0;
     dissemination_message_t* dMsg;
+    if (! m_running || m_bufBusy) {
+        return;
+    }
     dMsg = AMSend.getPayload (& m_buf, sizeof (dissemination_message_t));
     if (dMsg != NULL) {
         m_bufBusy = TRUE;
@@ -59,6 +69,9 @@ event message_t* Receive.receive (message_t* msg, void* payload,
     uint16_t key = dMsg->key;
     uint32_t incomingSeqno = dMsg->seqno;
     uint32_t currentSeqno = DisseminationCache.requestSeqno [key]();
+    if (! m_running) {
+        return msg;
+    }
     if (currentSeqno == DISSEMINATION_SEQNO_UNKNOWN &&
         incomingSeqno != DISSEMINATION_SEQNO_UNKNOWN) {
         DisseminationCache.storeData [key]( dMsg->data, len -
@@ -83,6 +96,9 @@ event message_t* ProbeReceive.receive (message_t* msg, void* payload,
                                         uint8_t len) {
     dissemination_probe_message_t* dpMsg = 
       (dissemination_probe_message_t*) payload;
+    if (! m_running) {
+        return msg;
+    }
     if (DisseminationCache.requestSeqno [dpMsg->key]() != 
         DISSEMINATION_SEQNO_UNKNOWN) {
         sendObject (dpMsg->key);

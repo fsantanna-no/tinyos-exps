@@ -10,10 +10,12 @@ C nohold _DisseminationCache_start(),
          _DisseminationCache_requestData(),
          _DisseminationCache_requestSeqno(),
          _ProbeAMSend_payloadLength(),
-         _ProbeAMSend_send(),
-         _AMSend_send(),
+         _AMSend_cancel(),
          _AMSend_maxPayloadLength(),
          _memcpy();
+C
+         _ProbeAMSend_send(),
+         _AMSend_send();
 
 C pure _ProbeAMSend_getPayload();
 
@@ -27,8 +29,8 @@ C _message_t=52,
 C constant _DISSEMINATION_SEQNO_UNKNOWN,
            _AM_BROADCAST_ADDR;
 
-//input void DRIP_START;
-//input void DRIP_STOP;
+input void DRIP_START;
+input void DRIP_STOP;
 input int  DRIP_SENDDONE;
 input int  DRIP_KEY_START;
 input int  DRIP_KEY_STOP;
@@ -36,8 +38,6 @@ input int  DRIP_KEY_NEW;
 input int  DRIP_KEY_TRICKLE;
 input _message_t* DRIP_DATA_RECEIVE;
 input _message_t* DRIP_PROBE_RECEIVE;
-
-var Drip[NUM_DRIPS] drips;
 
 /*
  * STATE-VARIABLES not required in Céu implementation:
@@ -57,23 +57,29 @@ var Drip[NUM_DRIPS] drips;
  * so it can never overwrite the buffer.
  */
 
-
 /*
-loop do
-    par/or do
-        await DRIP_START;       // TODO: global await
-        loop i, NUM_DRIPS do
-            drips[i].key = i;
-            _DisseminationCache_start(i);
-        end
-    with
-        await DRIP_STOP;        // TODO: global await
-        loop i, NUM_DRIPS do
-            _DisseminationCache_stop(i);
-        end
-    end
-end
+GLOBALS:
+
+nesC: m_running, m_buf, m_bufBusy
+
+Céu: none
+m_running: par/or / loop
+m_bufBusy: split-phase for send/sendDone
+m_buf (4th)
+
 */
+
+
+loop do
+    //await DRIP_START;       // TODO: global await
+
+    var Drip[NUM_DRIPS] drips;
+    loop i, NUM_DRIPS do
+        drips[i].key = i;
+    end
+
+    await DRIP_STOP;        // TODO: global await
+end
 
 // TODO: break in multiple for line comparison
 @define(AWAIT, `
@@ -88,7 +94,6 @@ class Drip with
     var u16 key;
 do
     event u8 send;
-    var _message_t m_buf;
 
     loop do
         AWAIT(DRIP_KEY_START);
@@ -141,6 +146,7 @@ do
                 end
             end
         with
+            var _message_t m_buf;
             loop do
                 await send;
                 tmp _dissemination_message_t* pay = _ProbeAMSend_getPayload(&m_buf,
@@ -153,7 +159,10 @@ do
                     tmp u8 len_;
                     if send==0 or pay:seqno==_DISSEMINATION_SEQNO_UNKNOWN then
                         _ProbeAMSend_send(_AM_BROADCAST_ADDR, &m_buf,
-                            sizeof<_dissemination_probe_message_t> );
+                            sizeof<_dissemination_probe_message_t>)
+                            finalize with
+                                _AMSend_cancel(&m_buf);
+                            end;
                         len_ = 0;
                     else
                         tmp void* obj;
@@ -170,7 +179,10 @@ do
                         _memcpy(pay:data, obj, len_);
                     end
                     _AMSend_send(_AM_BROADCAST_ADDR, &m_buf,
-			                    sizeof<_dissemination_message_t> + len_);
+                                sizeof<_dissemination_message_t> + len_)
+                        finalize with
+                            _AMSend_cancel(&m_buf);
+                        end;
                 end
                 await DRIP_SENDDONE;
             end

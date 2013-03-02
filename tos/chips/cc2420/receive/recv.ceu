@@ -65,6 +65,15 @@ C
     _SpiResource_release(),
     _SpiResource_request();
 
+/*
+GLOBALS:
+
+nesC: missed_packets, bytes_left, m_state,
+
+Céu:  local(3),       local(3),   .......,
+
+*/
+
 loop do
     await CC_RECV_START;
     _InterruptFIFOP_enableFallingEdge();
@@ -75,7 +84,7 @@ loop do
         _InterruptFIFOP_disable();
 
     with
-        event void next;
+        event void next;        // TODO: change emits to breaks
         loop do
             // reset_state()
             var u8 m_bytes_left = _RXFIFO_SIZE;
@@ -93,12 +102,12 @@ loop do
             with
                 loop do
                     await CC_RECV_FIFOP;
-                    m_missed_packets = m_missed_packets + 1;
+                    m_missed_packets = m_missed_packets + 1;    // 105
                 end
             with
                 loop do
                     // waitForNextPacket()
-                    if (m_missed_packets>0 and _FIFO_get())
+                    if (m_missed_packets>0 and _FIFO_get())     // 110
                     or (not _FIFOP_get())
                     then
                         if m_missed_packets > 0 then

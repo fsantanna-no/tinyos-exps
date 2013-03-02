@@ -6,7 +6,6 @@ loop do
         _CSN_set ();
         _InterruptFIFOP_disable ();
     with
-        event void next;
         loop do
             var u8 m_bytes_left = _RXFIFO_SIZE;
             _receivingPacket = _FALSE;
@@ -15,9 +14,7 @@ loop do
             var u8 m_missed_packets = 0;
             _SpiResource_release ();
             await CC_RECV_FIFOP;
-            par/or do
-                await next;
-            with
+            par do
                 loop do
                     await CC_RECV_FIFOP;
                     m_missed_packets = m_missed_packets + 1;
@@ -31,7 +28,7 @@ loop do
                             m_missed_packets = m_missed_packets - 1;
                         end
                     else
-                        emit next;
+                        break;
                     end
                     _receivingPacket = _TRUE;
                     if not (_SpiResource_isOwner () or
@@ -66,14 +63,14 @@ then
     _SFLUSHRX_strobe ();
     _SFLUSHRX_strobe ();
     _CSN_set ();
-    emit next;
+    break;
 end
 if (not _FIFO_get ()) and (not _FIFOP_get ()) then
     m_bytes_left = m_bytes_left - (rxFrameLength + 1);
 end
 if rxFrameLength == 0 then
     _CSN_set ();
-    emit next;
+    break;
 end
 if rxFrameLength > _SACK_HEADER_LENGTH then
     _RXFIFO_continueRead (& buf [1], _SACK_HEADER_LENGTH);

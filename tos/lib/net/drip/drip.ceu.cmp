@@ -1,4 +1,11 @@
-var Drip [NUM_DRIPS] drips;
+loop do
+    await DRIP_START;
+    var Drip[NUM_DRIPS] drips;
+    loop i, NUM_DRIPS do
+        drips [i] .key = i;
+    end
+    await DRIP_STOP;
+end
 @define(AWAIT, `
 loop do
     tmp u16 key_ = await $1;
@@ -11,7 +18,6 @@ class Drip with
     var u16 key;
 do
     event u8 send;
-    var _message_t m_buf;
     loop do
         AWAIT (DRIP_KEY_START);
         _TrickleTimer_start (this.key);
@@ -59,6 +65,7 @@ do
                 end
             end
         with
+            var _message_t m_buf;
             loop do
                 await send;
                 tmp _dissemination_message_t* pay =

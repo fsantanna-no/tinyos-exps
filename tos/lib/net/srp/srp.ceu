@@ -26,6 +26,8 @@ C pure
 
 C nohold
     _Receive_receive(),          // client is supposed not to hold
+    _SourceRouteSend_cancel(),
+    _SubSend_cancel(),
     _SourceRoutePacket_setRoute();
 
 C
@@ -37,6 +39,23 @@ input void              SRP_STOP;
 input _srp_send_t*      SRP_SEND;
 input _srp_senddone_t*  SRP_SENDDONE;
 input _srp_receive_t*   SRP_RECEIVE;
+
+/*
+GLOBALS:
+
+nesC: state(4), seqno, MsgPool, EntryPool, Queue
+      msg, len, client, clientEntries, clientStatus
+
+Céu:  ......., seqno,  MsgPool, forwarders, .....
+      msg  ...,   id,   clients,      ............
+
+state:
+clientStatus:
+Queue: try any
+len: 2nd
+
+
+*/
 
 interface Global with
     event _srp_forward_t* go_forward;
@@ -80,7 +99,9 @@ do
             var _message_t* snd_msg = snd:msg;
             _SubSend_send(_SourceRoutePacket_getNextHop(snd:msg),
                           snd:msg, snd:len + sizeof<_sr_header_t>)
-                finalize with nothing; end;  // msg is global
+                finalize with
+                    _SubSend_cancel(snd:msg);
+                end;
 
             // TODO
             done = await SRP_SENDDONE;
@@ -90,7 +111,9 @@ do
         end
 
         _SourceRouteSend_sendDone(this.id, done:msg, done:error)
-            finalize with nothing; end;     // msg is global
+            finalize with
+                _SourceRouteSend_cancel(done:msg);
+            end;
     end
 end
 

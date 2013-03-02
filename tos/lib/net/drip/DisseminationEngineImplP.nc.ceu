@@ -33,8 +33,6 @@ implementation
         NUM_DISSEMINATORS = uniqueCount("DisseminationTimerC.TrickleTimer")
     };
 
-    bool m_running;
-
 /*
     #define DisseminationCache_start(i) \
                 signal DisseminationCache.start[i]()
@@ -60,11 +58,9 @@ implementation
     #define ProbeAMSend_payloadLength(msg) \
                 call ProbeAMSend.payloadLength(msg)
     #define ProbeAMSend_send(a,b,c) \
-                if (m_running)      \
-                    call ProbeAMSend.send(a,b,c)
+                call ProbeAMSend.send(a,b,c)
     #define AMSend_send(a,b,c)      \
-                if (m_running)      \
-                    call AMSend.send(a,b,c)
+                call AMSend.send(a,b,c)
     #define AMSend_maxPayloadLength(a) \
                 call AMSend.maxPayloadLength(a)
 
@@ -77,7 +73,7 @@ implementation
         for ( i = 0; i < NUM_DISSEMINATORS; i++ ) {
             call DisseminatorControl.start[ i ]();
         }
-        m_running = TRUE;
+        ceu_go_event(IN_DRIP_START, NULL);
         return SUCCESS;
     }
 
@@ -86,7 +82,7 @@ implementation
         for ( i = 0; i < NUM_DISSEMINATORS; i++ ) {
           call DisseminatorControl.stop[ i ]();
         }
-        m_running = FALSE;
+        ceu_go_event(IN_DRIP_STOP, NULL);
         return SUCCESS;
     }
 
@@ -119,7 +115,6 @@ implementation
     event message_t* Receive.receive( message_t* msg, 
 				    void* payload, 
 				    uint8_t len ) {
-        if (!m_running) return FALSE;
         ceu_go_event(IN_DRIP_DATA_RECEIVE, msg);
         return msg;
     }
@@ -127,7 +122,6 @@ implementation
     event message_t* ProbeReceive.receive( message_t* msg, 
 					 void* payload, 
 					 uint8_t len) {
-        if (!m_running) return FALSE;
         ceu_go_event(IN_DRIP_PROBE_RECEIVE, msg);
         return msg;
     }

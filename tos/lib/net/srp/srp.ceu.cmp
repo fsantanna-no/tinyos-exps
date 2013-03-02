@@ -7,13 +7,8 @@ class Client with
 do
     var u8 seqno = 0;
     loop do
-        tmp _srp_send_t* snd;
-        loop do
-            snd = await SRP_SEND;
-            if snd:client == this.id then
-                break;
-            end
-        end
+        tmp _srp_send_t* snd = await SRP_SEND;
+                                until snd:client == this.id;
         tmp _nx_am_addr_t [SRP_MAX_PATHLEN] nxPath;
         loop i, snd:pathLen do
             nxPath [i] = snd:path [i];
@@ -30,6 +25,7 @@ do
             _SubSend_send (_SourceRoutePacket_getNextHop (snd:msg),
                            snd:msg, snd:len + sizeof <_sr_header_t>)
             done = await SRP_SENDDONE;
+                    
             if done:msg == snd_msg then
                 break;
             end

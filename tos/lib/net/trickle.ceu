@@ -18,6 +18,17 @@ loop do
 end
 ')
 
+/*
+GLOBALS:
+
+nesC: period, time, remainder, count (per trickle)
+
+Céu: none
+period (2nd-level), count (5th-level) appear as locals
+- states?
+
+*/
+
 class Trickle with
     var u8 id;
 do

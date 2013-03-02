@@ -15,7 +15,6 @@ C constant _BEACON_INTERVAL,
 C pure _AMPacket_address(),
        _AMPacket_source(),
        _CtpRoutingPacket_getOption(),
-       _BeaconSend_send(),
        _BeaconSend_getPayload(),
        //_BeaconSend_payloadLength(),
        _BeaconSend_maxPayloadLength();
@@ -29,7 +28,11 @@ C nohold _Random_rand32(),
          _CtpInfo_setNeighborCongested(),
          _task_updateRouteTask(),
          _routeInfoInit(),
+         _BeaconSend_cancel(),
          _routingTableInit();
+
+C
+       _BeaconSend_send();
 
  /*
  * STATE-VARIABLES not required in Céu implementation:
@@ -90,6 +93,17 @@ input void CTP_ROUTE_RADIO_STOPDONE;
 input void CTP_ROUTE_RADIO_SENDDONE;
 input _message_t* CTP_ROUTE_RADIO_RECEIVE;
 
+/*
+GLOBALS:
+
+nesC: radioOn, running, sending, routeInfo, s_is_root
+      beaconMsg, currentInterval, t, tHasPassed
+
+Céu:  ......., ......., ......., glb_rInfo, glb__root
+      msg(6th),  curInt(2nd),  t(5), ..........
+
+*/
+
 event void go_start;
 event void go_stop;
 event void go_reset;
@@ -113,7 +127,7 @@ par do
         with
             loop do
                 await (_BEACON_INTERVAL) ms;    // RouteTimer
-                _task_updateRouteTask();
+                _task_updateRouteTask();                        // 130
             end
         with
             loop do
@@ -140,7 +154,7 @@ par do
                     par/and do
                         await (currentInterval-t) ms;   // TODO: subtrair late?
                     with
-                        _task_updateRouteTask();
+                        _task_updateRouteTask();                // 157
 
                         // send beacon
 // LOCALS!!
@@ -165,9 +179,13 @@ par do
                                         _LinkEstimator_getLinkQuality(_glb_routeInfo.parent);
                         end
 
-                        tmp u8 eval = _BeaconSend_send(_AM_BROADCAST_ADDR,
-                                                        &msg,
-                                                        sizeof<_ctp_routing_header_t>);
+                        tmp u8 eval;
+                        eval = _BeaconSend_send(_AM_BROADCAST_ADDR,
+                                                    &msg,
+                                                    sizeof<_ctp_routing_header_t>)
+                            finalize with
+                                _BeaconSend_cancel(&msg);
+                            end;
                         if eval == _SUCCESS then
                             await CTP_ROUTE_RADIO_SENDDONE;
                         else/if eval == _EOFF then
