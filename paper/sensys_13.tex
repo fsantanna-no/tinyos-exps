@@ -1,1 +1,1292 @@
-/data/ceu/doc/sensys_13/sensys_13.tex
+\documentclass[10pt]{sensys-proc}
+
+\usepackage{balance}
+\usepackage{verbatim}
+\usepackage{xspace}
+%\usepackage{amssymb}
+%\usepackage{amsmath}
+%\usepackage{fancyvrb}
+%\usepackage{booktabs}
+%\usepackage{colortbl}
+%\usepackage{tabularx}
+%\usepackage{multirow}
+%\usepackage{color}
+%\usepackage{hyperref}    % Creates hyperlinks from ref/cite 
+%\hypersetup{pdfstartview=FitH}
+\usepackage{graphicx}
+\usepackage{url}
+
+%\renewcommand{\arraystretch}{1.2} % Space out rows in tables
+
+\setlength\paperheight {11in}
+\setlength\paperwidth {8.5in}
+
+% No space between bibliography items:
+\let\oldthebibliography=\thebibliography
+  \let\endoldthebibliography=\endthebibliography
+  \renewenvironment{thebibliography}[1]{%
+    \begin{oldthebibliography}{#1}%
+      \setlength{\parskip}{0ex}%
+      \setlength{\itemsep}{0ex}%
+  }%
+  {%
+    \end{oldthebibliography}%
+  }
+\setlength{\parindent}{5mm}
+
+\newcommand{\compresslist}{
+	\setlength{\itemsep}{1pt}
+	\setlength{\parskip}{0pt}
+	\setlength{\parsep}{0pt}
+}
+
+\newenvironment{itemize*}%
+  {\begin{itemize}%
+    \setlength{\itemsep}{0pt}%
+    \setlength{\parskip}{0pt}}%
+  {\end{itemize}}
+\usepackage{enumitem}
+\setlist{nolistsep}
+
+%\relpenalty=9999
+%\binoppenalty=9999
+
+\newcommand{\CEU}{\textsc{C\'{e}u}\xspace}
+\newcommand{\code}[1] {{\small{\texttt{#1}}}}
+\newcommand{\Code}[1] {\texttt{#1}}
+
+\begin{comment}
+\numberofauthors{2}
+
+\author{
+%
+% The command \alignauthor (no curly braces needed) should
+% precede each author name, affiliation/snail-mail address and
+% e-mail address. Additionally, tag each line of
+% affiliation/address with \affaddr, and tag the
+%% e-mail address with \email.
+\alignauthor Alice Security \\
+        \affaddr{Department of Computer Science}\\
+        \affaddr{University of Southern California}\\
+       \email{alice@example.edu}
+\alignauthor Bob Privacy \\
+    \affaddr{Networked Embedded Systems Group}\\
+    \affaddr{Swedish Institute of Computer Science}\\
+    \email{bob@example.se}
+}
+%\author{
+    %{Francisco Sant'Anna} \\
+    %\affaddr{Departamento de Inform\'atica - PUC-Rio} \\
+    %\email{fsantanna@inf.puc-rio.br}
+%}
+\end{comment}
+
+\title{Safe Concurrent Abstractions for Wireless Sensor Networks}
+
+%\crdata{978-1-4503-1169-4}
+%\conferenceinfo{SenSys'13,} {November X--X, 2013, Rome, Italy.}
+%\CopyrightYear{2013}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+ABSTRACT
+\end{abstract}
+
+% A category with the (minimum) three required fields
+%\category{H.4}{Information Systems Applications}{Miscellaneous}
+%A category including the fourth, optional field follows...
+%\category{D.2.8}{Software Engineering}{Metrics}[complexity measures, 
+%performance measures]
+
+%\terms{Delphi theory}
+
+%\keywords{ACM proceedings, \LaTeX, text tagging}
+
+\section{Introduction}
+\label{sec.intro}
+
+2 columns - ABSTRACT
+
+\newpage
+\section{Overview}
+\label{sec.overview}
+
+2 columns
+
+\newpage
+\section{The design of C\'eu}
+\label{sec.ceu}
+
+9 columns
+
+\begin{comment}
+trails = lightweight threads
+\CEU{} is a concurrent language in which multiple lines of execution (known as 
+\emph{trails}) continuously react to input events from the environment.
+Waiting for an event halts the running trail until that event occurs.
+The environment broadcasts occurring events to all active trails, which share a 
+single global time reference (an event itself).
+
+The following example executes two trails in parallel that show in leds the 
+received values from a radio:
+
+%{\small
+\begin{Verbatim}[commandchars=\\\{\}]
+    (\til{}Radio_recv \til{}> v)* || (\til{}v \til{}> Leds_set)*
+\end{Verbatim}
+%}
+
+The first trail (on the left of the \code{||} parallel operator) awaits 
+(\code{\til}) the external input event $Radio\_recv$, then triggers 
+(\code{\til>}) the internal event $v$, and then loops (\code{*}), repeating the 
+process.
+The second trail awaits the internal event $v$, then triggers the external 
+output event $Leds\_set$, and then loops back.
+In other words, whenever a radio message is received, the first trail resumes 
+and awakes the second trail passing the received value through the internal 
+event $v$.
+
+The basic distinctions are that the \code{await} primitive not only yields 
+control back to the system, but also registers the event that should 
+re-schedule the trail.
+Again, it is not only a matter of lightweight syntax, but also XXX the compiler 
+to know about the program execution flow.
+\end{comment}
+
+\subsection{Parallel syntactic compositions}
+\label{sec.ceu.par}
+
+The fundamental distinction between \CEU and prevailing multi-threaded designs 
+is the way threads are combined in programs.
+\CEU provides Esterel-like syntactic hierarchical compositions, while 
+conventional multi-threaded systems typically only support top-level 
+definitions for threads.
+
+Figure~\ref{lst.blink} illustrates this difference, showing the implementations 
+for two blinking LEDs with both approaches.
+
+In the Ocram~\cite{wsn.ocram} implementation, the two threads are defined as 
+global functions and must be controlled manually, i.e.,
+the decision to start or terminate each is independent of one another and up to 
+the programmer.
+
+In the \CEU implementation, the two trails are syntactically tied together 
+inside a \code{par} composition, implying that
+(a) they can only exist together;
+(b) they always start together
+(c) if they terminate, they do it together.
+
+Besides the arguably cleaner syntax, the additional control-flow information 
+provided in the program is the base for all features and safety guarantees 
+introduced by \CEU.
+
+\begin{figure}[t]
+%\rule{8.5cm}{0.37pt}
+\begin{minipage}[t]{0.50\linewidth}
+{\small
+\begin{verbatim}
+ // Ocram implementation
+ THREAD void blink1() {
+    int now = tc_time();
+    while(1) {
+       now += 250;
+       tc_sleep(now);
+       tc_toggle_led_0();
+    }
+ }
+ THREAD void blink2() {
+    int now = tc_time();
+    while(1) {
+       now += 500;
+       tc_sleep(now);
+       tc_toggle_led_1();
+    }
+ }
+\end{verbatim}
+}
+\end{minipage}
+%
+\hspace{0.0cm}
+%
+\begin{minipage}[t]{0.40\linewidth}
+%\fbox{
+{\small
+\begin{verbatim}
+// Ceu implementation
+par do
+   // blink 1
+   loop do
+      await 250ms;
+      _Leds_led0Toggle();
+   end
+with
+   // blink 2
+   loop do
+      await 500ms;
+      _Leds_led1Toggle();
+   end
+end
+\end{verbatim}
+%}
+}
+\end{minipage}
+\rule{8.5cm}{0.37pt}
+\caption{ ``Two blinking LEDs'' in Ocram and \CEU.
+\label{lst.blink}
+}
+\end{figure}
+
+The \code{par} composition is used when the trails are intended to run forever.
+\CEU also provides \code{par/and} and \code{par/or} compositions in order to 
+logically combine trails:
+a \code{par/or}  terminates (rejoins) when any of its trails terminates;
+a \code{par/and}, only when all terminate;
+
+The example in Figure~\ref{lst.radio} is extracted from our port of the 
+\emph{CC2420} radio driver~\cite{wsn.teps} to \CEU and uses \code{par/or} to 
+control the start/stop behavior for the radio.
+The input events \code{CC2420\_START} and \code{CC2420\_STOP} represent the 
+external interface of the driver.
+The driver enters the top-level loop and awaits the starting event;
+upon request, the driver spawns two other trails:
+one that awaits the stopping event,
+and another to actually receive radio messages in a loop.
+
+\begin{figure}[t]
+%\rule{8.5cm}{0.37pt}
+{\small
+\begin{verbatim}
+    input void CC2420_START, CC2420_STOP;
+    loop do
+        await CC2420_START;
+        par/or do
+            await CC2420_STOP;
+        with
+            // loop with other nested trails
+            // to receive radio packets
+            <...>
+        end
+    end
+\end{verbatim}
+}%
+\rule{8.5cm}{0.37pt}
+\caption{ Start/stop behavior for the CC2420 radio driver.
+\label{lst.radio}
+}
+\end{figure}
+
+As compositions can be nested, the receive loop can be as complex as needed, 
+but once an external request to stop the driver is triggered, the \code{par/or} 
+composition kills all nested trails and proceeds to the statement in sequence.
+In this case, the top-level loop restarts, waiting again for the start event.
+
+The \code{par/or} construct is regarded as an \emph{orthogonal preemption 
+primitive}~\cite{esterel.preemption} because the two sides in the composition 
+do not know when and why they get killed.
+Furthermore, they need not to be tweaked with synchronization primitives or 
+state variables in order to be affected by related trails in parallel.
+
+The same start/stop control pattern for the radio driver appears in all ported 
+network protocols presented in Section~\ref{sec.eval}.
+In practical terms, parallel compositions eliminated all state variables in our 
+ports, not only those related to split-phase 
+operations~\cite{wsn.protothreads}.
+
+\subsection{Deterministic and bounded execution}
+\label{sec.ceu.det}
+
+% TODO: motivate?
+
+\CEU{} is grounded on a precise definition of time as a discrete sequence of 
+external input events:
+% \footnote{We use the terms \emph{external input event}, \emph{external event}, 
+%and \emph{input event} interchangeably.}
+a sequence because only a single input event is handled at a time; discrete 
+because a complete reaction always executes in bounded time (to be discussed 
+further).
+The execution model for a \CEU{} program is as follows:
+
+\begin{enumerate}
+\item The program initiates the ``boot reaction'' in a single trail.
+\item Active trails execute until they await or terminate.
+      This step is named a \emph{reaction chain}, and always runs in bounded 
+      time.
+\item If there are no remaining awaiting trails, the program terminates.
+      Otherwise, the program goes idle and the environment takes control.
+\item On the occurrence of a new external input event, the environment awakes 
+      \emph{all} trails awaiting that event.
+      It then goes to step 2.
+\end{enumerate}
+
+If a new external input event occurs while a reaction chain is running (step 
+2), the environment enqueues it to run in the next reaction, because reaction 
+chains must run to completion.
+
+% TODO: a similar approach is taken in \cite{...}
+
+When multiple trails are active at a time (i.e. awaking from the same event), 
+\CEU schedules them in the order they appear in the program text.
+This policy is arbitrary but ensures a deterministic and reproducible execution 
+for programs.
+
+Reactions to the environment should run in bounded time to guarantee that 
+programs are responsive and can handle upcoming input events.
+Similarly to Esterel~\cite{esterel.ieee91}, \CEU requires that each possible 
+path in a loop body contains at least one \code{await} or \code{break} 
+statement, thus ensuring that loops never run in unbounded time.
+
+Consider the examples that follow:
+
+{\small
+\begin{verbatim}
+    loop do                     loop do
+        if <cond> then              if <cond> then
+            break;                      break;
+        end                         else
+    end                                 await A;
+                                    end
+                                end
+\end{verbatim}
+}
+
+The first example is refused at compile time, because the \code{if} true branch 
+may never execute, resulting in a \emph{tight loop} (i.e., an infinite loop 
+that does not await).
+The second variation is accepted, because for every iteration, the loop either 
+breaks or awaits.
+
+Enforcing bounded execution makes \CEU inappropriate for algorithmic-intensive 
+applications that require unrestricted loops (e.g., cryptography, image 
+processing).
+However, \CEU is designed for control-intensive applications and we believe 
+this is a reasonable price to pay in order to achieve higher reliability.
+
+% TODO: pause
+
+\subsection{Shared-memory concurrency}
+\label{sec.ceu.shared}
+
+WSNs applications make extensive use of shared memory, such as memory pools, 
+message queues, routing tables, etc.
+Hence, an important goal of \CEU is to ensure a reliable execution for 
+concurrent programs that use shared memory.
+
+Concurrency in \CEU is characterized when two or more trails segments execute 
+during the same reaction chain.
+A trail segment is a sequence of statements separated by an \code{await}.
+In the following example, the assignments run concurrently:
+
+\begin{minipage}[t]{0.30\linewidth}
+{\small
+\begin{verbatim}
+var int v=0;
+par/and do
+    v = v + 1;
+with
+    v = v * 2;
+end
+\end{verbatim}
+}
+\end{minipage}
+\hspace{0cm}
+\begin{minipage}[t]{0.30\linewidth}
+while in
+\end{minipage}
+\hspace{0cm}
+\begin{minipage}[t]{0.25\linewidth}
+{\small
+\begin{verbatim}
+input void A, B;
+var int v=0;
+par/and do
+    await A;
+    v = v + 1;
+with
+    await B;
+    v = v * 2;
+end
+\end{verbatim}
+}
+\end{minipage}
+
+the assignments are never concurrent, as $A$ and $B$ represent different 
+external events and the segments never execute at the same reaction chain.
+
+Note that although variable $v$ is accessed concurrently in the first example, 
+the assignments are both atomic (given the run to completion semantics) and 
+deterministic---the final value of $v$ is always $2$.
+
+However, programs with concurrent accesses to shared memory are suspicious, 
+because an apparently innocuous reordering of trails modifies the semantics of 
+the program.
+
+%Moreover, \CEU also supports pointers, which are required for low-level 
+%manipulation (e.g., accessing buffers from device drivers).
+
+We propose a compile-time \emph{temporal analysis} in order to detect 
+concurrent accesses to shared variables:
+If a variable is written in a trail segment, then a concurrent trail segment 
+cannot read or write to that variable, nor dereference a pointer of that 
+variable type.
+An analogous policy is applied for pointers vs variables and pointers vs 
+pointers.
+
+For each variable access, the algorithm holds the set of all possible preceding 
+\code{await} statements.
+Then, all sets for accesses in parallel segments are compared to assert that no 
+\code{await} statements are shared.
+Otherwise the compiler warns the programmer about the suspicious accesses.
+
+Consider the three examples of Figure~\ref{lst.det}.
+The first code is detected as suspicious, given that both assignments may be 
+concurrent in a reaction to $A$;
+In the second code, although two of the assignments occur in reactions to $A$, 
+they are not in parallel trails and, hence, are safe.
+The third code illustrates a false positive in our algorithm, as the 
+assignments in parallel can only occur in different reactions to $A$.
+
+\begin{figure}[t]
+\begin{minipage}[t]{0.36\linewidth}
+{\small
+\begin{verbatim}
+input void A;
+var int v;
+var int* p;
+<...>
+par/or do
+  loop do
+    await A;
+    if <cond> then
+      break;
+    end
+  end
+  v = 1;
+with
+  await A;
+  *p = 2;
+end
+\end{verbatim}
+}
+\end{minipage}
+\hspace{0cm}
+\begin{minipage}[t]{0.32\linewidth}
+{\small
+\begin{verbatim}
+input void A, B;
+var int v;
+par/or do
+  await A;
+  v = 1;
+with
+  await B;
+  v = 2;
+end
+await A;
+v = 3;
+\end{verbatim}
+}
+\end{minipage}
+\hspace{0cm}
+\begin{minipage}[t]{0.28\linewidth}
+{\small
+\begin{verbatim}
+input void A;
+var int v;
+par do
+  await A;
+  v = 1;
+with
+  await A;
+  await A;
+  v = 2;
+end
+\end{verbatim}
+}
+\end{minipage}
+\rule{8.5cm}{0.37pt}
+\caption{ The first and third programs are suspicious.
+\label{lst.det}
+}
+\end{figure}
+
+The proposed static analysis is only possible due to hierarchical compositions, 
+which provide precise information about the flow of trails, i.e., which may 
+occur in parallel and which are guaranteed to be in sequence.
+
+We also implemented an alternative algorithm that converts a \CEU program into 
+a deterministic finite automata.
+The resulting DFA represents all possible points a program can reach during 
+runtime and, hence, eliminates all false positives.
+However, the algorithm is exponential and may be impractical in many 
+situations.
+
+That said, we run the simpler static analysis for all ports presented in 
+Section~\ref{sec.eval} and no false positives were detected, suggesting that 
+the algorithm is practical.
+
+\subsection{Integration with $C$}
+\label{sec.ceu.c}
+
+Most existing operating systems, programming languages, and libraries for WSNs 
+rely on $C$, given its omnipresence and level of portability across embedded 
+platforms.
+This way, it is fundamental that programs in \CEU have access to all functions, 
+types, constants, and globals that the underlying platform already provides.
+
+In order to programs in \CEU access global $C$ symbols offered by the target 
+platform, any identifier prefixed with an underscore is repassed \emph{as is} 
+to the $C$ compiler that generates the final binary.
+
+\CEU also supports \emph{C~blocks} to define new symbols, as Figure~\ref{lst.c} 
+illustrates.
+All code inside ``\code{C do ... end}'' is also repassed to the $C$ compiler 
+for the final generation phase.
+%Only global definitions are allowed inside $C$ blocks.
+Note that \CEU{} mimics the type system of $C$, so that values can be 
+seamlessly passed back and forth between the languages.
+
+% TODO: real example?
+\begin{figure}[t]
+%\rule{8.5cm}{0.37pt}
+{\small
+\begin{verbatim}
+   C do
+       #include <assert.h>
+       int I = 0;
+       int inc (int i) {
+           return I+i;
+       }
+   end
+   C _assert(), _inc(), _I;
+   return _assert(_inc(_I));
+\end{verbatim}
+}
+\rule{8.5cm}{0.37pt}
+\caption{ A \CEU program with embedded $C$ definitions.
+\label{lst.c}
+}
+\end{figure}
+
+$C$ calls are fully integrated with the static analysis of \CEU.
+Given that \CEU has no knowledge about their side effects, $C$ calls cannot 
+appear in concurrent trails segments.
+Also, passing variables as parameters counts as read accesses to them, while 
+passing pointers counts as write accesses to those types (because functions may 
+dereference and assign to them).
+
+This policy increases considerably the number of false positives in the 
+analysis, given that many functions can be safely called concurrently.
+Therefore, \CEU supports syntactic annotations that the programmer can use to 
+relax the policy explicitly:
+
+\begin{itemize}
+\item The \code{pure} modifier declares a $C$ function that does not cause side 
+      effects, allowing it to be called concurrently with any other function in 
+the program.
+\item The \code{det} modifier declares a pair of variables or functions that do 
+      not affect each other, allowing them to be used concurrently.
+\end{itemize}
+
+The following code illustrates \CEU annotations:
+
+{\small
+\begin{verbatim}
+    pure  _abs();      // 'abs' is side-effect free
+    deterministic      // 'led0Toggle' vs 'led1Toggle' is ok
+        _Leds_led0Toggle with _Leds_led1Toggle;
+    int*  buf1, buf2;  // point to different memory
+    deterministic      // 'buf1' vs 'buf2' is ok
+        buf1 with buf2;
+\end{verbatim}
+}
+
+Annotations are typically write-once declarations (when integrating a $C$ 
+service for the first time) to be included in actual applications.
+Note that the example in Figure~\ref{lst.blink} should include the annotation 
+for \code{\_Leds\_led0Toggle} and \code{\_Leds\_led1Toggle} above to be 
+compiled correctly.
+
+\CEU does not extend the bounded execution analysis to $C$ function calls. 
+% which are left as responsibility for the programmer.
+% TODO: other languages dont as well
+On the one hand, $C$ calls must be carefully analyzed in order to keep programs 
+responsive.
+On the other hand, they also give the programmer means to circumvent the rigor 
+of \CEU in a well-marked way (i.e., the special underscore syntax).
+
+\begin{comment}
+This approach is also adopted by Esterel, which supports the \code{call} 
+primitive to execute code assumed to be instantaneous in the host 
+language~\cite{esterel.primer}.
+In \CEU, we take a step further and statically detects when such calls may 
+execute concurrently, as discussed in the next section.
+\end{comment}
+
+Evidently, the programmer should only recur to $C$ for I/O operations that are 
+assumed to be instantaneous, but never for control activities (e.g. interrupt 
+handling).
+
+\subsection{Local scopes and finalization}
+\label{sec.ceu.local}
+
+Local declarations for variables bring definitions closer to their use in 
+programs, increasing the readability and containment of code.
+Another benefit, specially in the context of WSNs, is that blocks in sequence 
+can share the same memory space, given that they are never active at the same 
+time.
+
+Once again, due to syntactic compositions of trails, the \CEU compiler can 
+statically allocate and optimize memory usage~\cite{wsn.osm}:
+memory for trails in parallel must coexist;
+trails that follow rejoin points may reuse all memory.
+
+However, the use of locals may introduce subtle bugs when dealing with pointers 
+and $C$ functions.
+Given that global $C$ functions outlive the scope of locals, a pointer passed 
+as parameter may be used after the referred variable goes out of scope.
+
+The code snippet in Figure~\ref{lst.local} was extracted from our port of the 
+CTP collection protocol~\cite{wsn.teps} to \CEU.
+The protocol contains a complex control hierarchy in which the trail that sends 
+beacon frames may be killed or restarted from multiple sources: stop the 
+protocol or radio, explicit resend request, or a neighbour request (all 
+collapsed in lines 3, 5, and 9).
+
+The sending loop (lines 7-18) awakes when the beacon timer expires (line 11).
+The message buffer is declared only where it is required (line 12, in the 6th 
+depth-level of the program) and its reference is manipulated by two $TinyOS$ 
+functions:
+\code{AMSend\_getPayload} (line 13), which gets the data region of the message 
+to be prepared (collapsed in line 14);
+and \code{AMSend\_send} (line 15), which requests the operating system to 
+actually send the message.
+
+However, the radio driver runs asynchronously with the protocol and holds the 
+reference to the message until it is completely transmitted, signaling back the 
+\code{AMSEND\_SENDDONE} event (line 16).
+In the meantime, the sending trail may be killed, resulting in a dangling 
+pointer in the program.
+
+A possible solution is to change each trail that kills the sending trail to 
+call \code{AMSend\_cancel}.
+This would require to expand the scope of the message buffer and a state 
+variable to keep track of the sending status, increase considerably the 
+complexity of the application.
+
+\CEU provides a safer and simpler solution with the following rule:
+\emph{pointers passed to $C$ functions require finalization code to safely 
+handle the variable going out of scope}.
+
+This rule prevents the previous example to compile, forcing the relevant parts 
+to be be rewritten as
+
+{\small
+\begin{verbatim}
+    C nohold _AMSend_getPayload();
+        <...>
+            var _message_t msg;
+            <...>
+            finalize
+                _AMSend_send(..., &msg, ...);
+            with
+                _AMSend_cancel(&msg);
+            end
+        <...>
+\end{verbatim}
+}
+
+The \code{nohold} annotation informs the compiler that the referred $C$ 
+function does not requires finalization code because it does not hold 
+references.
+The \code{finalize} construct executes the \code{with} clause when the block 
+containing the variable passed as parameter in the \code{finalize} clause goes 
+out of scope.
+This way, regardless of how the sending loop is killed, the finalization code 
+always executes and politely informs the OS to cancel the ongoing send 
+operation.
+
+The send/cancel pattern occurs in all ported applications that use the radio 
+for communication evaluated in Section~\ref{sec.eval}.
+% TODO: expand
+
+\begin{figure}[t]
+%\rule{8.5cm}{0.37pt}
+{\small
+\begin{verbatim}
+ 1:  <...>
+ 2:  par/or do
+ 3:      <...>           // stop the protocol or radio
+ 4:  with
+ 5:      <...>           // neighbour request
+ 6:  with
+ 7:      loop do
+ 8:          par/or do
+ 9:              <...>   // resend
+10:          with
+11:              await (dt) ms;  // beacon timer expired
+12:              var _message_t msg;
+13:              payload = _AMSend_getPayload(&msg, ...);
+14:              <prepare the message>
+15:              _AMSend_send(..., &msg, ...);
+16:              await CTP_ROUTE_RADIO_SENDDONE;
+17:          end
+18:      end
+19:  end
+\end{verbatim}
+}
+\rule{8.5cm}{0.37pt}
+\caption{ Unsafe use of local references.
+\label{lst.local}
+}
+\end{figure}
+
+\subsection{Wall-clock time}
+\label{sec.ceu.time}
+
+Activities that involve reactions to \emph{wall-clock time}%
+\footnote{
+By wall-clock time we mean the passage of time from the real world, measured in 
+hours, minutes, etc.
+}
+appear in typical patterns of WSNs, such as sensor sampling and watchdogs.
+However, support for wall-clock time is somewhat low-level in existing 
+languages, usually through timer callbacks or sleep blocking calls.
+
+In any concrete system implementation, a requested timeout does not expire 
+precisely with zero-delay, a fact that is usually neglected by programmers.
+We define the difference between the requested timeout and the actual expiring 
+time as the \emph{residual delta time (delta)}.
+Without explicit manipulation, the recurrent use of timed activities in 
+sequence (or in a loop) might accumulate a considerable amount of deltas that 
+could lead to incorrect behavior in programs.
+
+The \code{await} statement of \CEU supports wall-clock time and handles deltas 
+automatically, resulting in more robust applications.
+As an example, consider the following program:
+
+{\small
+\begin{verbatim}
+    int v;
+    await 10ms;
+    v = 1;
+    await 1ms;
+    v = 2;
+\end{verbatim}
+}
+
+Suppose that after the first \code{await} request, the underlying system gets 
+busy and takes 15ms to check for expiring awaits.
+The scheduler will notice that the \code{await 10ms} has not only already 
+expired, but delayed with \code{delta=5ms}.
+Then, the awaiting trail awakes, sets \code{v=1}, and invokes \code{await 1ms}.
+However, the current delta is higher than the requested timeout (i.e. $5ms > 
+1ms$), so the trail is immediately rescheduled for execution, now with 
+\code{delta=4ms}.
+
+\CEU also takes into account the fact that time is a physical quantity that can 
+be added and compared.
+For instance, for the program that follows, although \CEU cannot guarantee that 
+the first trail terminates exactly in 11ms, it can at least ensure that the 
+program always returns $1$:
+
+%\begin{figure}[t]
+%\rule{8.5cm}{0.37pt}
+{\small
+\begin{verbatim}
+    par do
+        await 10ms;
+        <...>         // any non-awaiting sequence
+        await  1ms;
+        return 1;
+    with
+        await 12ms;
+        return 2;
+    end
+\end{verbatim}
+}
+%\rule{8.5cm}{0.37pt}
+%\caption{ The first trail always terminates the program.
+%\label{lst.time}
+%}
+%\end{figure}
+
+A similar program in a language without first-class support for timers, would 
+depend on the execution timings for the code marked as \code{<...>} (usually 
+assumed to be instantaneous in synchronous models).
+
+% TODO: static analysis
+
+% TODO: uses in ports
+% trickle?
+
+\subsection{Internal events}
+\label{sec.ceu.time}
+
+\CEU provides internal events as a signaling mechanism among trails in 
+parallel:
+a trail that invokes \code{await~e} can be awaken in the future by a trail that 
+invokes \code{emit~e}.
+
+In contrast with external events, which are handled in a queue, internal events 
+follow a stack policy.
+In practical terms, this means that a trail that emits an internal event pauses 
+until all trails awaiting that event completely react to it, continuing to 
+execute afterwards.
+
+Another difference to external events is that internal events occur in the same 
+reaction chain they are emitted, i.e., an \code{emit} instantaneously matches 
+and awakes all correspondent \code{await} statements that were invoked in 
+previous reaction chains.
+
+The stacked execution for internal events introduces support for a restricted 
+form of subroutines that cannot express recursive definitions (either directly 
+or indirectly), resulting in memory-bounded programs that preclude stack 
+overflows.
+% TODO: exec bounded
+% TODO: why?
+
+Figure~\ref{lst.func} shows how the dissemination trail from our port of the 
+DRIP protocol to \CEU can be invoked from different parts of the program, just 
+like subroutines.
+The DRIP protocol distinguishes from data and metadata packets and disseminates 
+one or the other based depending on external events.
+For instance, when the trickle timer expires, the program invokes 
+\code{emit~send=0}, which awakes the dissemination trail and starts sending a 
+metadata packet.
+If the trail is already sending a packet, than the \code{emit} does not match 
+the \code{await} and will have no effect (just like the \emph{nesC} 
+implementation, which uses a explicit state variable to achieve this behavior).
+
+% TODO: missed sends / non reentrancy
+
+\begin{figure}[t]
+%\rule{8.5cm}{0.37pt}
+{\small
+\begin{verbatim}
+event int send;
+par do
+    <...>
+        await DRIP_KEY;
+        emit send=1;        // broadcast data
+with
+    <...>
+        await DRIP_TRICKLE;
+        emit send=0;        // broadcast meta
+with
+    <...>
+        var _message_t* msg = await DRIP_DATA_RECEIVE;
+        <...>
+        emit send=1;        // broadcast data
+with
+    loop do
+        var int data? = await send;
+        <...>   // send data or metadata
+    end
+end
+\end{verbatim}
+}
+\rule{8.5cm}{0.37pt}
+\caption{ The \code{send} ``subroutine'' is invoked from different parts of the 
+program.
+\label{lst.func}
+}
+\end{figure}
+
+Internal events also provides means for describing more elaborate control 
+structures, such as exceptions.
+The code in Figure~\ref{lst.exception} handles incoming packets for the CC2420 
+radio driver in a loop (lines 3-17).
+After awaking from a new packet notification (line 4), the program enters in a 
+sequence of (lines 8-17) to read the bytes from the hardware buffer.
+If any anomaly is found on the received data, the program invokes 
+\code{emit~next} to discard the current packet (lines 10,14).
+Given the stacked execution for internal events, the \code{emit} invocation is 
+stacked and the trail in line 6 awakes, terminates, and kills the whole 
+\code{par/or} in which the emitting trail is blocked.
+This way, the continuation for the \code{emit} never resumes, and the loop 
+restarts to await the next packet.
+
+\begin{figure}[t]
+%\rule{8.5cm}{0.37pt}
+{\small
+\begin{verbatim}
+ 1:    <...>
+ 2:    event void next;
+ 3:    loop do
+ 4:        await CC_RECV_FIFOP;
+ 5:        par/or do
+ 6:            await next;
+ 7:        with
+ 8:            <...>
+ 9:            if rxFrameLength > _MAC_PACKET_SIZE then
+10:                emit next;  // packet is too large
+11:            end
+12:            <...>
+13:            if rxFrameLength == 0 then
+14:                emit next;  // packet is empty
+15:            end
+16:            <...>
+17:        end
+18:    end
+\end{verbatim}
+}
+\rule{8.5cm}{0.37pt}
+\caption{ The \code{emit} raises an exception handled by \code{await}.
+\label{lst.exception}
+}
+\end{figure}
+
+\subsection{Code reentrancy}
+\label{sec.ceu.oo}
+
+\begin{comment}
+Objects
+    - each method is a global function receiving a different object to 
+      manipulate
+    - global (usually heap)
+    - garbage collected or global
+
+Organisms
+    - mutual reactivity
+    - scoped / local
+    - O(1) GC
+
+- nesting
+    - data
+    - events
+    - listeners
+    - compositions
+
+- orgs have body
+- objects have methods
+
+- both have an interface
+- fields / methods
+
+- fields / internal events
+- public fields are ok because reliable shared memory
+
+- no recursive definitions
+- but we have interfaces
+- special global interface
+\end{comment}
+
+\newpage
+\section{Evaluation}
+\label{sec.eval}
+
+8 columns
+
+\subsection{Resource usage}
+
+% results indicate a good design, features "se encaixam", no bloat
+
+\subsection{Expressiveness} (Ease of programming)
+\subsection{Safety}
+
+\section{Related work}
+\label{sec.related}
+
+(See Figure~\ref{fig.related}.)
+
+\begin{figure*}[t]
+\includegraphics[width=\textwidth]{features.png}
+\caption{ Table of features found in related works of \CEU.
+\label{fig.related}
+}
+\end{figure*}
+
+2 columns
+
+\section{Conclusion}
+\label{sec.conclusion}
+
+% most safety guarantees actually make the programming experience more 
+% expressive
+
+1 columns
+
+\begin{comment}
+CONCLUSION
+Note that one of the main objectives of \CEU is to enhance safety in concurrent 
+patterns, in the sense that if the programmer sticks to \CEU primitives for 
+control patterns it will gain...
+avoid cycles
+The stack execution policy for internal events can express nested emits, and 
+also avoids dependency cycles in programs.
+
+In \CEU, there are three possible sources of non-determinism:
+\emph{concurrent access to variables} (e.g. \code{(1=>a\&\&2=>a)}),
+\emph{concurrent \emph{par/or} termination} (e.g. \code{(1||2)=>a}, might yield 
+$1$ or $2$), and \emph{concurrent loop escape}%
+\footnote{ The token \brk{} escapes the innermost loop with its preceding 
+expression. }
+(e.g. \code{(1\brk{} \&\& 2\brk)* =>a}).
+
+During compile time, \CEU{} converts programs into deterministic finite 
+automatons in order to detect the three forms of non-determinism.
+This conversion is the reason why \CEU{} is a static language.
+% TODO: claim
+A DFA unequivocally represents a \CEU{} program, covering exactly all possible 
+paths it can reach during runtime.
+For instance, the following program is identified as non-deterministic, because 
+the variable $v$ is accessed concurrently on the 6th occurrence of the event 
+$A$:
+
+\Code{
+(\til{}A; \til{}A; 1=>v)*
+\&\&
+(\til{}A; \til{}A; \til{}A; v)*
+}
+
+\end{comment}
+
+\begin{comment}
+% BACKGROUND
+
+- hard vs soft real-time
+
+% MOTIVATION
+
+- Safety:
+    "
+
+% BENCHMARKS
+
+- TinyOS
+    - minimization and prevention [decade]
+        - minimizing resource   (constraint)
+        - preventing bugs       (constraint)
+    - isolation
+        - not in protothreads
+        - static
+        - "it makes each component's interaction to an underlying shared 
+          resource completely independent"
+
+    - EFICIENCY: minimization
+    - SAFETY: prevention, isolation
+    - EXPRESSIVENESS: isolation
+
+- Protothreads
+    - state machines removal
+    - solves sequential execution
+    - subsequent alternatives are similar
+    - wide use
+    - available
+    - represents all alternatives that follows the right approach
+        (synchronous concurrency)
+
+    - no isolation
+
+    - EXPRESSIVENESS: state machines
+    - SAFETY: ?
+    - in terms of safety not many gains, still shared-globals (isolation),
+
+% CONTRIBUTIONS
+
+- thinked together
+- both aspects are embraced in a single design:
+    - safety is not possible w/o extra information aquired from high-level
+    - high-level is not possible w/o safety
+    - ex.
+        - par/or w/ stacked internal emits for killing
+        - par for shared-memory
+        - shared-memory analysis is not possible w/o par
+
+% DESIGN
+
+- timers
+    - exemplo da chamada periodica a alarme que avoids ""
+
+% EVALUATION
+
+    - we sticked to the component model
+        - protothreads rewrote?
+        - if we rewrite? (drip gains)
+
+    - lines/tokens
+
+    - states
+
+    - other globals
+
+    - features used in examples: par/or/and, wclocks, OO
+
+    - finally p/ cancelar mensagens (timers, evts, nao precisa)
+    - mais uma razao para ter timers de 1a classe (sao cancelados 
+      automaticamente)
+    - procurar nos exs. do tinyOS por TODOs relacionados a isso
+
+- send é hold
+    finally p/ cancelar
+- receive é nohold
+
+In the XXX protocol a message to XXX needs is sent whenever XXX.
+In the code snippet that follows, the declaration of the messasge buffer is 
+local and is N levels of depth to the top-level block of the code.
+Hence, much more readable than having a global that you cannot say where it is 
+used if not inspecting the whole code.
+
+internal events are needed to eliminate state when they occur in the middle of 
+a par trail (i.e., the trail is not signaling with its termination)
+
+However,.
+
+    - isolation
+        - eliminated queues and pools
+            - full queue is equivalent to miss an event
+
+- CTP exemplo radio? / ctp? (4 estados) transformados em start/stop (que 
+  carregam uma semantica) // controle dessas variaveis totalmente localizado em 
+paralelo com o programa, sem globais
+
+par/and p/ evitar chamadas que retornam erro:
+
+Timer.periodic(XXX)
+Timer.fired() {
+    if (call AMSend.send()) {
+        ...
+    }
+}
+
+await XXX;
+loop do
+    par/and do
+        await XXX;
+    with
+        AMSend.send();
+        await SEND\_DONE;
+    end
+end
+
+-- se ha multiplos:
+
+await XXX;
+loop do
+    par/and do
+        await XXX;
+    with
+        loop do
+            AMSend.send();
+            await SEND\_DONE;
+            if me then
+                break;
+            end
+        end
+    end
+end
+
+-- FINALIZE
+
+%find . -name "*.nc" | xargs egrep -R "\.send\(|\.send \(" | grep -v command | 
+%wc
+%=> 349
+
+%find . -name "*.nc" | xargs egrep -R "\.cancel\(|\.cancel \(" | grep -v 
+%command | wc
+%=> 49
+
+Bug in SRP:
+- usually in TinyOS, decrease in performance, waste of radio, but buffer is 
+  global
+HOWEVER:
+- client takes a message from MessagePool
+
+related: lembrar que PROTO e OCRAM têm sequential composition
+    PT\_SPAWN e normal call
+
+\end{comment}
+
+\begin{comment}
+Figure~\ref{lst.ctp} shows how we use internal events to abstract the 
+start/stop operations for our port of the CTP collection 
+protocol~\cite{wsn.teps} to \CEU.
+
+The first column of Figure~\ref{lst.ctp} declares the internal events and 
+mimics the start/stop pattern used for the radio driver in 
+Figure~\ref{lst.radio}.
+In parallel, we define the actual behavior for the operations (expanded in the 
+second column), which depend not only from external requests to start/stop the 
+protocol but also from the radio status.
+
+The second column keeps track of the current external state through the local 
+variables \code{ctp?} and \code{radio?}%
+\footnote{\CEU allows the symbol \code{?} in identifiers.}
+and emits the appropriate event when TODO, multiplexing four external events 
+into two internal events.
+
+\begin{figure}[t]
+%\rule{8.5cm}{0.37pt}
+\begin{minipage}[t]{0.45\linewidth}
+{\small
+\begin{verbatim}
+event void start;
+event void stop;
+par do
+  // start/stop pattern
+  loop do
+    await start;
+    par/or do
+      await stop;
+    with
+      // executes CTP
+      <...>
+    end
+  end
+with
+  <code to emit start/stop>
+end
+\end{verbatim}
+}
+\end{minipage}
+%
+\hspace{0.0cm}
+%
+\begin{minipage}[t]{0.45\linewidth}
+%\fbox{
+{\small
+\begin{verbatim}
+// <code to emit start/stop>
+var int ctp?   = 0;
+var int radio? = 0;
+loop do
+  par/or do
+    await CTP_START;
+    ctp? = 1;
+  with
+    await CTP_STOP;
+    ctp? = 0;
+  with
+    await RADIO_STARTDONE;
+    radio? = 1;
+  with
+    await RADIO_STOPDONE;
+    radio? = 0;
+  end
+  if ctp? and radio? then
+    emit start;
+  else
+    emit stop;
+  end
+end
+\end{verbatim}
+%}
+}
+\end{minipage}
+\rule{8.5cm}{0.37pt}
+\caption{ Start/stop behavior for the CTP protocol.
+\label{lst.ctp}
+}
+\end{figure}
+\end{comment}
+
+\balance
+%{\footnotesize
+\bibliographystyle{abbrv}
+\bibliography{other}
+%}
+
+\end{document}
