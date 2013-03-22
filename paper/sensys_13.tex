@@ -82,7 +82,8 @@
 %}
 \end{comment}
 
-\title{Safe Concurrent Abstractions for Wireless Sensor Networks}
+%\title{Safe Concurrent Abstractions for Wireless Sensor Networks}
+\title{Safe Synchronous Abstractions for Wireless Sensor Networks}
 
 %\crdata{978-1-4503-1169-4}
 %\conferenceinfo{SenSys'13,} {November X--X, 2013, Rome, Italy.}
@@ -247,11 +248,11 @@ event void T2.fired () {
 \begin{verbatim}
 /********* PROTOTHREADS *********/
 int main () {
-  timer_set(&watchdog, 60000);
+  timer_set(&timeout, 60000);
   PT_INIT(&blink);
   while (
     PT_SCHEDULE(blink()) &&
-    !timer_expired(watchdog)
+    !timer_expired(timeout)
   );
   leds_off(LEDS_RED);
   <...> // CONTINUE
@@ -384,18 +385,18 @@ programmer keeps track of them in a logical fashion, according to the
 application specification.
 
 From a control perspective, the logical relations among events represent 
-activities in an application that follow two main patterns: \emph{sequential}, 
+activities in an application and follow two main patterns: \emph{sequential}, 
 i.e., activities composed of two or more states in sequence; or 
 \emph{parallel}, i.e., unrelated activities that eventually need to 
 synchronize.
 
 As an example, an application that alternates between sampling a sensor and 
 broadcasting its readings has a clear sequential pattern (with an enclosing 
-loop); while including an 1-minute watchdog timer to interrupt the activity 
-comprises a parallel pattern.
+loop); while including an 1-minute timeout to interrupt the activity comprises 
+a parallel pattern.
 
 An effective language for WSNs should provide control abstractions that better 
-express the programmer intetions, desirably ensuring that the high degree of 
+express the programmer intentions, desirably ensuring that the high degree of 
 concurrency does not impose safety threats.
 
 Figure~\ref{lst.all} exposes the different programming models used in WSNs, 
@@ -405,8 +406,8 @@ After 1 minute, the application turns off the LED and proceeds to the code
 marked as \code{<...>}.
 The diagram on the right describes the control behavior for the application.
 The sequential pattern is represented with the LED alternating between the two 
-states, while the parallel pattern is represented by the 1-minute watchdog that 
-interrupts the blinking LED.
+states, while the parallel pattern is represented by the 1-minute timeout.
+% that interrupts the blinking LED.
 
 The first implementation, which represents the \emph{event-driven} 
 model~\cite{wsn.nesc,wsn.contiki}, spawns two timers at boot time 
@@ -418,7 +419,7 @@ proceeding to \code{<...>}.
 This implementation is the least structured, given that the blinking loop is 
 not explicit, but instead, relies on a static state variable and multiple 
 invocations of the same callback.
-Furthermore, the 1-minute watchdog needs specific knowledge on how to stop the 
+Furthermore, the timeout handler needs specific knowledge on how to stop the 
 blinking activity manually (\code{T1.cancel()}).
 
 The second implementation, which represents the \emph{multi-threaded} 
@@ -428,7 +429,7 @@ The main thread also helps identifying the overall sequence of the program,
 which is not easily identifiable in the event-driven implementation without 
 tracking the dependencies among callbacks.
 However, it still requires a lot of bookkeeping for initializing, scheduling 
-and rejoining the blinking thread after the watchdog expires.
+and rejoining the blinking thread after the timeout.
 
 % ASYNC MT?
 
@@ -580,6 +581,7 @@ Then, the blinking trail awaits again, and the 1-minute timeout is scheduled
 and kills the whole \code{par/or}.
 This reasoning is reproducible in practice, and the LED will light on exactly 
 21 times for every execution of this program.
+First-class timers are discussed in more depth in Section~\ref{sec.ceu.time}.
 
 The described behavior is known as \emph{weak abortion}, because the blinking 
 trail has the chance to execute for the last time.
@@ -935,48 +937,44 @@ Another benefit, specially in the context of WSNs, is that blocks in sequence
 can share the same memory space, given that they are never active at the same 
 time.
 
-Once again, due to syntactic compositions of trails, the \CEU compiler can 
-statically allocate and optimize memory usage~\cite{wsn.osm}:
+The syntactic compositions of trails allows the \CEU compiler to statically 
+allocate and optimize memory usage~\cite{wsn.osm}:
 memory for trails in parallel must coexist;
-trails that follow rejoin points may reuse all memory.
+trails that follow rejoin points reuse all memory.
 
-However, the use of locals may introduce subtle bugs when dealing with pointers 
-and $C$ functions.
+However, the unrestricted use of locals introduce subtle bugs when dealing with 
+pointers and $C$ functions.
 Given that global $C$ functions outlive the scope of locals, a pointer passed 
-as parameter may be used after the referred variable goes out of scope.
+as parameter may be used after the referred variable goes out of scope, leading 
+to a \emph{dangling pointer}.
 
 The code snippet in Figure~\ref{lst.local} was extracted from our port of the 
 CTP collection protocol~\cite{wsn.teps} to \CEU.
 The protocol contains a complex control hierarchy in which the trail that sends 
-beacon frames may be killed or restarted from multiple sources: stop the 
-protocol or radio, explicit resend request, or a neighbour request (all 
-collapsed in lines 3, 5, and 9).
+beacon frames may be killed or restarted from multiple sources (protocol/radio 
+stop, and local/network resend request, all collapsed in lines 3, 5, and 9).
 
 The sending loop (lines 7-18) awakes when the beacon timer expires (line 11).
-The message buffer is declared only where it is required (line 12, in the 6th 
-depth-level of the program) and its reference is manipulated by two $TinyOS$ 
-functions:
+Note that the message buffer is declared only where it is required (line 12, in 
+the 6th depth-level of the program), but its reference is manipulated by two 
+$TinyOS$ global functions:
 \code{AMSend\_getPayload} (line 13), which gets the data region of the message 
 to be prepared (collapsed in line 14);
 and \code{AMSend\_send} (line 15), which requests the operating system to 
 actually send the message.
+As the radio driver runs asynchronously and holds a reference to the message 
+until it is completely transmitted, the sending trail may be killed in the 
+meantime, resulting in a dangling pointer in the program.
 
-However, the radio driver runs asynchronously with the protocol and holds the 
-reference to the message until it is completely transmitted, signaling back the 
-\code{AMSEND\_SENDDONE} event (line 16).
-In the meantime, the sending trail may be killed, resulting in a dangling 
-pointer in the program.
-
-A possible solution is to change each trail that kills the sending trail to 
-call \code{AMSend\_cancel}.
-This would require to expand the scope of the message buffer and a state 
-variable to keep track of the sending status, increase considerably the 
+A possible solution is to include a call to \code{AMSend\_cancel} in all trails 
+that kill the sending trail.
+However, this would require to expand the scope of the message buffer and add a 
+state variable to keep track of the sending status, increasing considerably the 
 complexity of the application.
 
 \CEU provides a safer and simpler solution with the following rule:
-\emph{pointers passed to $C$ functions require finalization code to safely 
-handle the variable going out of scope}.
-
+\emph{$C$ calls that receive pointers require a finalization block to safely 
+handle variables going out of scope}.
 This rule prevents the previous example to compile, forcing the relevant parts 
 to be be rewritten as
 
@@ -995,19 +993,15 @@ to be be rewritten as
 \end{verbatim}
 }
 
-The \code{nohold} annotation informs the compiler that the referred $C$ 
-function does not requires finalization code because it does not hold 
+First, the \code{nohold} annotation informs the compiler that the referred $C$ 
+function does not require finalization code because it does not hold 
 references.
-The \code{finalize} construct executes the \code{with} clause when the block 
-containing the variable passed as parameter in the \code{finalize} clause goes 
-out of scope.
+Second, the \code{finalize} construct automatically registers the \code{with} 
+clause to execute when the variable passed as parameter in the \code{finalize} 
+clause goes out of scope.
 This way, regardless of how the sending loop is killed, the finalization code 
 always executes and politely informs the OS to cancel the ongoing send 
 operation.
-
-The send/cancel pattern occurs in all ported applications that use the radio 
-for communication evaluated in Section~\ref{sec.eval}.
-% TODO: expand
 
 \begin{figure}[t]
 %\rule{8.5cm}{0.37pt}
@@ -1048,7 +1042,7 @@ Activities that involve reactions to \emph{wall-clock time}%
 By wall-clock time we mean the passage of time from the real world, measured in 
 hours, minutes, etc.
 }
-appear in typical patterns of WSNs, such as sensor sampling and watchdogs.
+appear in typical patterns of WSNs, such as sensor sampling and timeouts.
 However, support for wall-clock time is somewhat low-level in existing 
 languages, usually through timer callbacks or sleep blocking calls.
 
@@ -1110,11 +1104,13 @@ program always returns $1$:
 %}
 %\end{figure}
 
+Remember that any non-awaiting sequence is considered to take no time in the 
+synchronous model.
+Hence, the first trail is guaranteed to terminate before the second trail, 
+because $10+1 < 12$.
 A similar program in a language without first-class support for timers, would 
-depend on the execution timings for the code marked as \code{<...>} (which is 
-assumed to be instantaneous in the synchronous model).
-
-% TODO: static analysis
+depend on the execution timings for the code marked as \code{<...>}, making the 
+reasoning about the execution behavior more difficult.
 
 % TODO: uses in ports
 % trickle?
@@ -1136,12 +1132,14 @@ execute afterwards.
 Another difference to external events is that internal events occur in the same 
 reaction chain they are emitted, i.e., an \code{emit} instantaneously matches 
 and awakes all correspondent \code{await} statements that were invoked in 
-previous reaction chains.
+\emph{previous reaction chains}%
+\footnote{An \code{await} cannot awake on the same reaction chain it is 
+invoked.}.
 
 The stacked execution for internal events introduces support for a restricted 
 form of subroutines that cannot express recursive definitions (either directly 
-or indirectly), resulting in memory-bounded programs that preclude stack 
-overflows.
+or indirectly), resulting in bounded memory and execution times.
+% that preclude stack overflows.
 % TODO: exec bounded
 % TODO: why?
 
@@ -1149,7 +1147,7 @@ Figure~\ref{lst.func} shows how the dissemination trail from our port of the
 DRIP protocol to \CEU can be invoked from different parts of the program, just 
 like subroutines.
 The DRIP protocol distinguishes from data and metadata packets and disseminates 
-one or the other based depending on external events.
+one or the other based on external requests.
 For instance, when the trickle timer expires, the program invokes 
 \code{emit~send=0}, which awakes the dissemination trail and starts sending a 
 metadata packet.
@@ -1192,19 +1190,21 @@ program.
 }
 \end{figure}
 
-Internal events also provides means for describing more elaborate control 
-structures, such as exceptions.
+Internal events also provide means for describing more elaborate control 
+structures, such as \emph{exceptions}.
 The code in Figure~\ref{lst.exception} handles incoming packets for the CC2420 
 radio driver in a loop (lines 3-17).
 After awaking from a new packet notification (line 4), the program enters in a 
-sequence of (lines 8-17) to read the bytes from the hardware buffer.
+sequence to read the bytes from the hardware buffer (lines 8-17).
 If any anomaly is found on the received data, the program invokes 
 \code{emit~next} to discard the current packet (lines 10,14).
 Given the stacked execution for internal events, the \code{emit} invocation is 
-stacked and the trail in line 6 awakes, terminates, and kills the whole 
+stacked, awaking the trail in line 6, which terminates and kills the whole 
 \code{par/or} in which the emitting trail is blocked.
 This way, the continuation for the \code{emit} never resumes, and the loop 
 restarts to await the next packet.
+
+% TODO: resumable
 
 \begin{figure}[t]
 %\rule{8.5cm}{0.37pt}
@@ -1253,70 +1253,71 @@ In traditional multi-threaded systems, code reentrancy is achieved with
 function declarations that are executed with different stacks and instruction 
 pointers.
 In object oriented languages, a \emph{class} encapsulates methods and 
-properties, and can be instantiated with objects.
+properties, and can be instantiated as objects.
 
-In \CEU, we designed an hybrid approach, which combines both ideas in the so 
-called \emph{organisms}.
-An organism class is composed of an \emph{interface} and a \emph{body}.
+In \CEU, we designed an hybrid approach, which combines threads and classes in 
+the so called \emph{organisms}.
+An organism class is composed of an \emph{interface} and a single \emph{body}.
 The interface exposes public variables and internal events that other organisms 
-(and the top-level body) can refer to.
-The body of a class has access to all presented functionality provided by \CEU, 
-such as parallel compositions, $C$ calls, timers, etc.
+(and the top-level body) can refer.
+The body of a class is equivalent to a trail, having access to all presented 
+functionality provided by \CEU, such as parallel compositions, $C$ calls, 
+timers, etc.
 An organism is instantiated by declaring a variable of the desired class, and 
 its body is automatically spawned in a \code{par/or} with the enclosing block.
 A method can be simulated by exposing an internal event in the interface of the 
 class and using the same technique of Figure~\ref{lst.func}.
 
-\begin{comment}
-TODO: remove
-
-The first column of Figure~\ref{lst.orgs} re-implements the "Two blinking LEDs" 
-of Figure~\ref{lst.blink}, now using organisms.
+The first column of Figure~\ref{lst.orgs} re-implements the example of 
+Figure~\ref{lst.all} to blink two LEDs with different frequencies.
 The \code{Blink} class exposes the \code{led} and \code{freq} variables to be 
-configured by the application, which declares two Blink organisms and 
-initializes them.
+configured by the application, which then creates two instances and initializes 
+them.
 
 The second column shows how the organisms bodies are expanded to run in a 
 \code{par/or} together with the enclosing block body.
-The expansion is illustrative, i.e., the code is not actually duplicated.
+The expansion is illustrative, i.e., the code is not duplicated.
 Note that in the expansion, the bodies of the organisms are followed by 
 \code{await~FOREVER}%
 \footnote{\code{FOREVER} is a reserved keyword in \CEU, and represents an 
 external input event that never occurs.}%
 , meaning that only the enclosing block can terminate the \code{par/or}.
-Note also that the block body runs first and can properly initialize the 
-organisms before they are spawned.
+Note also that the block body runs first and properly initializes the organisms 
+before they are spawned.
 
 Once the enclosing block terminates, declared organisms are killed and all 
 memory can be reused, just as happens in standard parallel compositions.
 The allocation and deallocation of organisms is static, with no runtime 
-overhead such as for memory allocation and garbage collection.
+overhead such as garbage collection.
 
 \begin{figure}[t]
 %\rule{8.5cm}{0.37pt}
 \begin{minipage}[t]{0.45\linewidth}
 {\small
 \begin{verbatim}
-C _toggle;  // vec of funcs
+C _on(), _off();
+
 class Blink with
    var int led;
    var int freq;
 do
    loop do
-      await (this.freq)ms;
-      _toggle[this.led]();
+      _on(this.led);
+      await (this.freq)s;
+      _off(this.led);
+      await (this.freq/2)s;
    end
 end
 
-var Blink b1, b2;
+var Blink b1;
+b1.led  = 0;
+b1.freq = 2;
 
-b1.led  =   0;
-b1.freq = 250;
+var Blink b2;
+b2.led  = 1;
+b2.freq = 4;
 
-b2.led  =   1;
-b2.freq = 500;
-
-await 1h;
+await 1min;
 \end{verbatim}
 }
 \end{minipage}
@@ -1327,24 +1328,28 @@ await 1h;
 %\fbox{
 {\small
 \begin{verbatim}
-C _toggle;
+C _on(), _off();
 var Blink b1, b2;
 par/or do
-   b1.led  =   0;
-   b1.freq = 250;
-   b2.led  =   1;
-   b2.freq = 500;
-   await 1h;
+   b1.led  = 0;
+   b1.freq = 2;
+   b2.led  = 1;
+   b2.freq = 4;
+   await 1min;
 with
    loop do
-      await (b1.freq)ms;
-      _toggle[b1.led]();
+      _on(b1.led);
+      await (b1.freq)s;
+      _off(b1.led);
+      await (b1.freq/2)s;
    end
    await FOREVER;
 with
    loop do
-      await (b2.freq)ms;
-      _toggle[b2.led]();
+      _on(b2.led);
+      await (b2.freq)s;
+      _off(b2.led);
+      await (b2.freq/2)s;
    end
    await FOREVER;
 end
@@ -1357,7 +1362,6 @@ end
 \label{lst.orgs}
 }
 \end{figure}
-\end{comment}
 
 Figure~\ref{lst.srp} shows part of our port of the SRP routing 
 protocol~\cite{wsn.teps} to \CEU.
@@ -1369,26 +1373,27 @@ instances to serve requests.
 
 The first column of Figure~\ref{lst.srp} shows the receiving loop of the 
 protocol, which invokes \code{emit~go} when a message needs to be forwarded.
-The event is declared as global, so that the \code{Forwarder} class has access 
+The event is declared as global, so that \code{Forwarder} instances have access 
 to it.
 The forwarders are declared in a vector, creating \code{COUNT} different 
 instances.
 As the vector is local, all instances are automatically killed when the 
 protocol is stopped.
-Note the use of the start/stop pattern of Figure~\ref{lst.radio} again.
+(Note the use of the start/stop pattern of Figure~\ref{lst.radio} again.)
 
 The second column of Figure~\ref{lst.srp} shows the \code{Forwarder} class.
-Initially, all forwarders are in the same state, wiating for the global event 
+Initially, all forwarders are in the same state, waiting for the global event 
 \code{go}.
-Once the receiving loop emits the event, the forwarders awake in the order they 
-were declared.
+Once the receiving loop emits the event in the top-level body, the forwarders 
+awake in the order they were declared.
 The first forwarder atomically sets the \code{gotcha} variable, indicating that 
-the message will be handled.
-All other forwarders will await again for the next \code{go} emission.
+the message will be handled and that other forwarders should ignore it:
+all other forwarders will await again for the next \code{go} emission.
 With this technique, we eliminated the need of an explicit queue.
 In the case that all forwarders become busy, the \code{go} emission will be 
 missed (with \code{gotcha=0}), acting just like a full queue.
 
+\begin{comment}
 Note that \CEU organisms are not global entities and do not use the heap for 
 memory.
 Instead, they are bounded to the scope they are declared, and all memory is 
@@ -1400,7 +1405,8 @@ Hence, the ``garbage collection'' for both the memory and code in organisms is
 efficient and static.
 Although \CEU does not support dynamic creation (which could lead do unbounded 
 memory), scoped organisms offer some degree of flexibility when compared to 
-global objects only~\cite{wsn.virgil,wsn.flowtalk}.
+systems providing global objects only~\cite{wsn.virgil,wsn.flowtalk}.
+\end{comment}
 
 % TODO: ND access
 
@@ -1416,12 +1422,12 @@ loop do
     await SRP_STOP;
   with
     var Forwarder[COUNT] fwds;
-    <initialization>
+    <initialize fwds>
     loop do
       await SRP_RECEIVE;
       <receive or forward>
       if hops_left > 0 then
-        <...>
+        <prepare fwd>
         emit go=&fwd;
       end
     end
@@ -1559,6 +1565,8 @@ in \code{/opt/tinyos-2.1.1/apps/}.
 \subsection{Resource usage}
 \label{sec.eval.resource}
 
+% TODO: testnetwork, somente CTP(!)
+
 % important bla bla bla
 % results indicate a good design, features "se encaixam", no bloat
 
@@ -1567,6 +1575,14 @@ in \code{/opt/tinyos-2.1.1/apps/}.
 % theoretical limitation?
 % radio throughput is the critical in WSNs
 % packet losses involve retransmissions which are expensive
+
+%We conclude that local scopes are currently more important as a programming 
+%XXX than to actually a mechanism to reuse memory.
+%we checked, all in parallel
+%Similar results from evaluations in related work~\cite{wsn.ocram,wsn.sol}
+
+% nesC uses less RAM than \emph{all}.
+% two apps in sequence
 
 \subsection{Code complexity}
 \label{sec.eval.code}
@@ -1599,9 +1615,8 @@ lack of a better primitive).
 Keeping track of them is regarded as a difficult task, hence, reduction of 
 state variables has already been proposed as a metric of code complexity in a 
 related work~\cite{wsn.protothreads}.
-In the \CEU implementations, state variables were reduced to zero, as all 
-control patterns could be expressed with hierarchical compositions of 
-activities.
+In \CEU implementations, state variables were reduced to zero, as all control 
+patterns could be expressed with hierarchical compositions of activities.
 
 Data variables in WSNs are usually used to hold message buffers and protocol 
 parameters (e.g. sequence numbers, timer intervals, etc.).
@@ -1614,7 +1629,7 @@ Although the use of local variables does not incur in reduction of lines of
 code (or tokens), we believe that the smallest the scope of a variable, the 
 more readable and less susceptible to bugs the program becomes.
 
-In the \CEU implementations, most variables could be nested to a deeper scope.
+In \CEU implementations, most variables could be nested to a deeper scope.
 The column \emph{locals} in Figure~\ref{fig.eval} shows the depth of each 
 global that became a local variable in \CEU (where depth=0 is a global 
 variable).
@@ -1629,6 +1644,11 @@ time (a \code{par} may spawn more than 2 trails).
 % TODO: DRIP uses trickle as a service (does not implement it)
 
 \subsection{Safety}
+
+The send/cancel pattern occurs in all ported applications that use the radio 
+for communication evaluated in Section~\ref{sec.eval}.
+% TODO: expand
+
 
 * static analysis
 
@@ -1654,15 +1674,59 @@ nesC no
 \section{Related work}
 \label{sec.related}
 
-(See Figure~\ref{fig.related}.)
-
 \begin{figure*}[t]
-\includegraphics[width=\textwidth]{features.png}
+\includegraphics[width=\textwidth]{related.png}
 \caption{ Table of features found in related works to \CEU.
 \label{fig.related}
 }
 \end{figure*}
 
+Figure~\ref{fig.related} presents an overview of related works to \CEU, 
+pointing support for specific features XXX, which are discussed individually.
+Although Esterel~\cite{esterel.ieee91} is not targeted at WSNs, we included it 
+given its strong influence on \CEU and many related works.
+The second line, \emph{Preemptive}, represents all multi-threaded languages 
+with preemptive scheduling~\cite{wsn.mantisos,Y,Z}.
+The remaining lines enumerate languages with similar goals of \CEU that also 
+follow a synchronous or cooperative execution semantics (they are sorted by the 
+date they first appear in a publication).
+
+The three columns under \emph{Composition} indicate which languages provide
+abstractions to deal with \emph{sequential} and \emph{parallel} compositions of 
+activities, as well as \emph{internal communication} among them.
+Esterel first introduced hierarchical compositions of processes, which first 
+appeared in the context of WSNs in Protothreads~\cite{wsn.protothreads} and 
+Sol~\cite{wsn.sol} (indicated by the gray background).
+\CEU differs from these on the stack-based semantics for internal events, which 
+is essential to bring other control mechanisms, such as exceptions, as 
+discussed in Section~\ref{sec.ceu.ints}.
+It is known that languages with preemptive scheduling cannot express thread 
+termination safely~\cite{esterel.preemption,sync_async.threadsstop}, being 
+unsuitable for a \code{par/or} construct.
+
+The two columns under \emph{Memory} list language support for \emph{code 
+reentrancy} and \emph{local scopes} for variables, which account for saving ROM 
+and RAM, respectively.
+Both properties are easily achieved in traditional multi-threaded systems, in 
+which threads share global functions as bodies, with each holding a different 
+stack.
+However, this approach is not resource-efficient, given that the compiler 
+cannot infer when each thread is active, enforcing all to be statically 
+allocated~\cite{wsn.mantisos,wsn.ocram} (even if some of them are never active 
+at the same time).
+\emph{nesC} provides compile-time instantiable components, which resemble 
+classes from object-oriented programming.
+As discussed in Section~\ref{sec.ceu.oo}, \CEU organisms introduce an hybrid 
+approach, providing TODO.
+\CEU support for local scopes is very similar to how OSM~\cite{wsn.osm} does.
+
+TODO
+Esterel derived cannot offer the analysis
+
+TODO
+Although \CEU does not support dynamic creation (which could lead do unbounded 
+memory), scoped organisms offer some degree of flexibility when compared to 
+systems providing global objects only~\cite{wsn.virgil,wsn.flowtalk}.
 \section{Conclusion}
 \label{sec.conclusion}
 
@@ -2245,6 +2309,13 @@ Figure~\ref{}
     }
 \end{verbatim}
 }
+
+In Esterel, time is defined as discrete reaction steps in which multiple 
+external signals (events in \CEU) can be queried on their presence status.
+This semantics has more proximity with that of electronic circuits, but 
+simultaneous events would inhibit the temporal analysis of \CEU.
+For instance, variable manipulation in Esterel is restricted to a single 
+process (trail in \CEU).
 
 
 
