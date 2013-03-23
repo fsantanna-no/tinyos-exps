@@ -83,7 +83,8 @@
 \end{comment}
 
 %\title{Safe Concurrent Abstractions for Wireless Sensor Networks}
-\title{Safe Synchronous Abstractions for Wireless Sensor Networks}
+%\title{Safe Synchronous Abstractions for Wireless Sensor Networks}
+\title{Safe System-level Concurrency for Resource-Constrained Motes}
 
 %\crdata{978-1-4503-1169-4}
 %\conferenceinfo{SenSys'13,} {November X--X, 2013, Rome, Italy.}
@@ -94,8 +95,37 @@
 \maketitle
 
 \begin{abstract}
-ABSTRACT
-% EOD -> MT -> SYN/HIER
+
+Research in Wireless Sensor Networks conducts a continuous effort to reduce 
+programming complexity without introducing significant overheads.
+Multi-threaded and synchronous languages offer proper support for sequential 
+and structured programming, overcoming the difficulties of (still) prevailing 
+event-driven development.
+However, safety aspects in concurrent and control-intensive applications is not 
+taken into a greater extent in current designs, and most analysis and 
+mitigation efforts are delegated to programmers.
+% relying
+  
+We present a system language design that prioritizes safe concurrency, going
+beyond only \emph{providing} mechanisms, but rather \emph{enforcing} handling 
+threats at compile time.
+\CEU supports concurrent lines of execution that run in time steps and are 
+allowed to share variables.
+However, its synchronous and static nature enables a compile-time analysis that 
+ensures deterministic and memory-safe programs, even in the presence of 
+pointers and low-level system calls.
+Our proposed analysis pervades all language functionality, such as parallel 
+compositions, first-class timers, and internal event communication.
+We successfully ported existing network protocols and a radio driver to \CEU, 
+showing the applicability of our design in highly-constrained platforms.
+
+% TODO
+%Nevertheless, \CEU does not renounce to practical aspects, providing seamless 
+%integration with $C$ for low-level manipulation
+%
+%With a good balance between low-level and high-level functionality, \CEU{} 
+%fits the constrained requirements of embedded systems.
+
 \end{abstract}
 
 % A category with the (minimum) three required fields
@@ -121,80 +151,82 @@ or unreachable areas, such as wildfire in forests and air temperature in
 buildings.
 Each mote features limited processing capabilities, a short-range radio link, 
 and one or more sensors (e.g. light and temperature) \cite{wsn.survey}.
-\end{comment}
 
 Applications developed for wireless sensor networks (WSNs) typically perform a 
 succession of sensing, processing, actuating, and communicating.
 This process involves an external environment, which concurrently interacts 
 with the application by issuing events that represent expiring timers, messages 
 arrivals, sensor readings, etc.
-%The fact that the application is not in charge of the environment results in a 
-%high degree of concurrency among events occurrences and the program execution.
+\end{comment}
 
-% TODO: system/node
+System-level development for WSNs basically consists of abstracting access to 
+the hardware and designing specially tweaked network 
+protocols~\cite{wsn.tos,wsn.survey} to be further integrated as services in 
+higher-level applications or macro-programming systems~\cite{wsn.state_of_art}.
+The external environment plays an important, as it interacts with applications 
+permanently (and concurrently) by issuing events that represent expiring 
+timers, messages arrivals, sensor readings, etc.
+If (hard) timeliness cannot be met by WSNs applications, given their networked 
+nature, it is still paramount to have a reliable programming environment, 
+pushing to compile-time as much safety guarantees as 
+possible~\cite{wsn.decade}.
 
-The first languages and operating systems for WSNs provide an event-driven 
-programming model \cite{wsn.tos,wsn.contiki}, in which each external event can
+Three major programming models have been proposed for system-level development 
+in WSNs: the \emph{event-driven}, \emph{multi-threaded}, and \emph{synchronous} 
+models.
+%
+In event-driven programming \cite{wsn.tos,wsn.contiki}, each external event can 
 be associated with a short-lived function callback to handle a reaction to the 
 environment.
 This model is efficient for the severe resource constraints of WSNs, but is 
-difficult to program, given the ineffectiveness of local 
-variables~\cite{sync_async.cooperative} and the explicit management of state 
-machines~\cite{wsn.protothreads}.
-
+known to be difficult to 
+program~\cite{sync_async.cooperative,wsn.protothreads}.
+%
 Multi-threaded systems emerged as an alternative, providing traditional 
 structured programming for WSNs (e.g.~\cite{wsn.protothreads,wsn.mantisos}).
-However, the programmer still has to manually synchronize and maintain threads 
-(e.g. create, start, and destroy).
-Furthermore, preemptive scheduling of threads is a potential source of safety 
-hazards~\cite{sync_async.threadsproblems}, while cooperative scheduling is 
-susceptible to unbounded execution (i.e. infinite loops), breaking 
-responsiveness in programs~\cite{wsn.comparison}.
+However, the development process still requires manual synchronization and 
+bookkeeping of threads (e.g. create, start, and 
+rejoin)~\cite{sync_async.threadsproblems}.
+%
+Synchronous languages~\cite{rp.twelve} have also been successfully adapted to 
+WSNs and offer higher-level compositions of activities, considerably reducing 
+programming efforts~\cite{wsn.sol,wsn.osm}.
 
-Synchronous languages are a higher-level alternative that have been 
-successfully adapted to WSNs without imposing a significant 
-overhead~\cite{wsn.sol,wsn.osm}.
-%We believe that the programming facilities found in these languages match 
-%perfectly with the reactive nature of WSNs and can be adopted in this context.
-They provide high-level compositions of concurrent activities through 
-hierarchies of processes~\cite{esterel.ieee91} or state 
-machines~\cite{statecharts.visual}, reducing the programmer efforts with 
-synchronization issues.
-
-However, existing synchronous languages targetting WSNs do not consider safety 
-aspects in a broad view, suffering from the same difficulties of multi-threaded 
-designs.
-For instance, shared memory is usually the only mechanism for communication and 
-synchronization, but current works do not go beyond atomic access guarantees 
-relying on a run to completion semantics~\cite{wsn.sol,wsn.osm}.
-
-Furthermore, WSN development typically involves low-level access to the 
-platform through $C$ system calls that pass pointers back and forth (e.g.  
-message buffers to the radio driver).
-Current works do not discuss effective policies to handle such corner cases.
-For instance, the claimed gains in memory and expressiveness with support for 
-locals~\cite{wsn.ocram,wsn.osm} are under safety threats if pointers that go 
-out of scope are used.
+Despite the increase in development productivity, languages still lack
+effective safety guarantees to build complex concurrent applications.
+%
+As an example, shared memory is widely used as a low-level communication 
+mechanism, but current languages do not go beyond atomic access guarantees, 
+either explicitly through synchronization 
+primitives~\cite{wsn.mantisos,wsn.tinythreads}, or implicitly with cooperative 
+scheduling~\cite{wsn.sol,wsn.nesc}.
+Requiring manual synchronization leads to potential safety 
+hazards~\cite{sync_async.threadsproblems}, while implicit synchronization is no 
+less questionable, as it assumes that \emph{all} accesses are potentially 
+dangerous.
+The bottom line is that existing languages cannot detect and enforce atomicity 
+only when they are required.
+%
+Furthermore, system-level development typically involves accesses to the 
+underlying platform through $C$ system calls that hold pointers for some time
+(e.g. transmission of a message buffer).
+Hence, programs can potentially have a \emph{dangling pointer} if the referred 
+memory is a local variable that goes out of scope.
 
 In this work, we present the design of \CEU%
-\footnote{C\'eu is the Portuguese word for \emph{sky}.}, a system-level 
-programming language based on Esterel~\cite{esterel.ieee91} that provides a 
-reliable yet powerful programming environment for WSNs.
-We explore the precious control information that can be inferred from 
+\footnote{C\'eu is the Portuguese word for \emph{sky}.}, a synchronous 
+system-level programming language based on Esterel~\cite{esterel.ieee91} that 
+provides a reliable yet powerful programming environment for WSNs.
+We explore the precious control information that can be inferred from thread
 compositions at compile time in order to embrace safety aspects to a greater 
-extend.
-
-Our design is first compromised with the main principles that govern WSNs 
-development: \emph{resource minimization} and \emph{bug prevention}, as defined 
-by Levis~\cite{wsn.decade}.
-That said, support for hierarchical compositions, together with a convenient 
-syntax for timers and internal communication also lead to more compact programs 
-(up to 70\% reduction, in our evaluation).
-
-Currently, our design focus only on \emph{concurrency safety}, rather than on 
-\emph{type safety}~\cite{wsn.safety}.
-We consider both aspects to be complimentary and orthogonal, i.e., type safety 
-annotations and runtime checks could also be applied to \CEU.
+extent.
+%
+Currently, we focus only on \emph{concurrency safety}, rather than on 
+\emph{type safety}~\cite{wsn.safety}.%
+\footnote{
+We consider both safety aspects to be complimentary and orthogonal, i.e., 
+type-safety annotations could also be applied to \CEU.
+}
 
 \begin{comment}
 TODO
@@ -204,10 +236,6 @@ execution.
 \CEU relies on a compile-time analysis to detect unbounded loops and concurrent 
 access to variables.
 \end{comment}
-
-Our overall contribution is the careful design of concurrent abstractions that 
-considers safety aspects for every proposed functionality.
-As more specific contributions, we enumerate the following language features:
 
 \begin{figure*}[!t]
 %\rule{8.5cm}{0.37pt}
@@ -290,7 +318,7 @@ par/or do
 with
    await 1min;
 end
-_Leds_led0Off(0);
+_Leds_led0Off();
 <...> // CONTINUE
 \end{verbatim}
 %}
@@ -318,13 +346,18 @@ _Leds_led0Off(0);
 }
 \end{figure*}
 
+Our overall contribution is the careful design of concurrent abstractions that 
+can detect safety threats at compile time, enforcing the rewriting of 
+suspicious code.
+As more specific contributions, we enumerate the following features:
+
 \begin{itemize}
-\item A compile-time analysis that enforces reliable shared-memory concurrency.
+\item A compile-time analysis for reliable shared-memory concurrency.
 \item A finalization mechanism to safely release resources just before they go 
       out of scope.
 \item First-class timers with a predictable behavior.
-\item A stack-based inter-thread communication mechanism that provides a 
-      restricted (but safer) form of subroutines.
+\item Stack-based inter-thread communication, which provides a restricted (but 
+      safer) form of subroutines.
       % and can be used to handle exceptions.
 \item An object system that provides code reentrancy and enables the creation 
       of higher-level abstractions.
@@ -340,6 +373,13 @@ dynamic features are discouraged due to resource constraints and safety
 requirements.
 
 \begin{comment}
+Our design is first compromised with the main principles that govern WSNs 
+development: \emph{resource minimization} and \emph{bug prevention}, as defined 
+by Levis~\cite{wsn.decade}.
+That said, the support for hierarchical compositions, together with a 
+convenient syntax for timers and internal communication also lead to more 
+compact programs (up to 70\% reduction, in our evaluation).
+
 TODO
 
 SAFETY, both react to time, what if they access memory, who executes first
@@ -363,15 +403,15 @@ abstractions need to be first class
 The rest of the paper is organized as follows:
 Section~\ref{sec.overview} gives an overview of how different programming 
 models used in WSNs can express typical control patterns.
-Section~\ref{sec.ceu} details the design of \CEU by motivating, describing, 
-exemplifying, and discussing safety aspects of each relevant language feature.
-In Section~\ref{sec.eval}, we describe how we ported to \CEU the open-source 
-implementations of some open standards~\cite{wsn.teps} (e.g. network protocols 
-and a radio driver),
+Section~\ref{sec.ceu} details the design of \CEU by motivating and discussing 
+safety aspects for each relevant language feature.
+In Section~\ref{sec.eval}, we describe how we ported to \CEU some open 
+standards of system-level protocols~\cite{wsn.teps},
+% (e.g. network protocols and a radio driver),
 % (the \emph{CC2420} radio driver, the \emph{trickle} timer, and the 
 %\emph{DRIP}, \emph{SRP}, and \emph{CTP} protocols)
 comparing some quantitative aspects with \emph{nesC} (e.g. memory usage and 
-tokens count) backed by a thoughtful discussion.
+tokens count).% backed by a thoughtful discussion.
 Section~\ref{sec.related} presents a XXX of related works to \CEU.
 Section~\ref{sec.conclusion} concludes the paper and makes final remarks.
 
@@ -380,31 +420,32 @@ Section~\ref{sec.conclusion} concludes the paper and makes final remarks.
 
 As briefly introduced, WSNs applications must handle a multitude of concurrent 
 events, such as from timers and packet transmissions.
-Although they may seem random and unrelated for an external observer, the 
-programmer keeps track of them in a logical fashion, according to the 
-application specification.
-
-From a control perspective, the logical relations among events represent 
-activities in an application and follow two main patterns: \emph{sequential}, 
-i.e., activities composed of two or more states in sequence; or 
-\emph{parallel}, i.e., unrelated activities that eventually need to 
-synchronize.
-
+Although they may seem random and unrelated for an external observer, a
+program must keep track of them in a logical fashion, in accordance with its 
+specification.
+%
+From a control perspective, the logical relations among events follow two main 
+patterns: \emph{sequential}, i.e., program activities composed of two or more 
+states in sequence; or \emph{parallel}, i.e., unrelated activities that 
+eventually need to synchronize.
+%
 As an example, an application that alternates between sampling a sensor and 
 broadcasting its readings has a clear sequential pattern (with an enclosing 
-loop); while including an 1-minute timeout to interrupt the activity comprises 
-a parallel pattern.
+loop); while including an 1-minute timeout to interrupt the activity consists 
+of a parallel pattern.
 
-An effective language for WSNs should provide control abstractions that better 
-express the programmer intentions, desirably ensuring that the high degree of 
-concurrency does not impose safety threats.
+% TODO
+%An effective language for WSNs should provide control abstractions that can 
+%better express program specifications, desirably ensuring that the high degree 
+%of concurrency does not impose safety threats.
 
 Figure~\ref{lst.all} exposes the different programming models used in WSNs, 
 showing three implementations for an application that continuously lights on a 
 LED for 2 seconds and off for 1 second.
 After 1 minute, the application turns off the LED and proceeds to the code 
 marked as \code{<...>}.
-The diagram on the right describes the control behavior for the application.
+The diagram on the right describes the overall control behavior for the 
+application.
 The sequential pattern is represented with the LED alternating between the two 
 states, while the parallel pattern is represented by the 1-minute timeout.
 % that interrupts the blinking LED.
@@ -416,10 +457,10 @@ The callback \code{T1.fired} continuously toggles the LED and resets the timer
 according to the state variable \code{on}.
 The callback \code{T2.fired} executes once, cancelling the blinking timer and 
 proceeding to \code{<...>}.
-This implementation is the least structured, given that the blinking loop is 
-not explicit, but instead, relies on a static state variable and multiple 
+This implementation has little structure, given that the blinking loop is not 
+explicit, but instead, relies on a static state variable and multiple 
 invocations of the same callback.
-Furthermore, the timeout handler needs specific knowledge on how to stop the 
+Furthermore, the timeout handler needs specific knowledge about how to stop the 
 blinking activity manually (\code{T1.cancel()}).
 
 The second implementation, which represents the \emph{multi-threaded} 
@@ -434,21 +475,20 @@ and rejoining the blinking thread after the timeout.
 % ASYNC MT?
 
 The third implementation, in \CEU, which represents the \emph{synchronous 
-model}~\cite{wsn.osm,wsn.sol}, uses a \code{par/or} construct to run the two 
-activities in parallel:
+model}, uses a \code{par/or} construct to run the two activities in parallel:
 an endless loop to blink the LED, and a single statement that waits for 1 
 minute before terminating.
 A \code{par/or} stands for \emph{parallel or} and rejoins automatically when 
 any of its trails terminates.
 (\CEU also supports \code{par/and} compositions, which rejoin when \emph{all} 
 spawned trails terminate.)
-
-The hierarchical syntactic structure more closely reflects the diagram and ties 
+%
+The hierarchical structure of \CEU more closely reflects the diagram and ties 
 the two activities together, implying that
 (a) they can only exist together;
 (b) they always start together
 (c) they always terminate together.
-
+%
 Besides the arguably cleaner syntax, the additional control-flow information 
 provided in the program is the base for all features and safety guarantees 
 introduced by \CEU.
@@ -466,10 +506,10 @@ introduced by \CEU.
 Waiting for an event halts the running trail until that event occurs.
 The environment broadcasts occurring events to all active trails, which share a 
 single global time reference (an event itself).
-
+%
 %\subsection{Parallel syntactic compositions}
 %\label{sec.ceu.par}
-
+%
 The fundamental distinction between \CEU and prevailing multi-threaded designs 
 is the way threads are combined in programs.
 \CEU provides Esterel-like syntactic hierarchical compositions, while 
@@ -479,28 +519,30 @@ definitions for threads.
 The example in Figure~\ref{lst.radio} is extracted from our port of the 
 \emph{CC2420} radio driver~\cite{wsn.teps} to \CEU and uses a \code{par/or} to 
 control the start/stop behavior of the radio.
-The input events \code{CC2420\_START} and \code{CC2420\_STOP} represent the 
-external interface of the driver with a client application (e.g. a protocol).
-The driver enters the top-level loop and awaits the starting event;
+The input events \code{CC2420\_START} and \code{CC2420\_STOP} (line 1) 
+represent the external interface of the driver with a client application (e.g.  
+a protocol).
+The driver enters the top-level loop (lines 2-11) and awaits the starting event 
+(line 3);
 upon request, the driver spawns two other trails:
-one that awaits the stopping event,
-and another to actually receive radio messages in a loop.
-
+one to await the stopping event (line 5),
+and another to actually receive radio messages in a loop (collapsed in line 9).
+%
 \begin{figure}[t]
 %\rule{8.5cm}{0.37pt}
 {\small
 \begin{verbatim}
-    input void CC2420_START, CC2420_STOP;
-    loop do
-        await CC2420_START;
-        par/or do
-            await CC2420_STOP;
-        with
-            // loop with other nested trails
-            // to receive radio packets
-            <...>
-        end
-    end
+ 1:    input void CC2420_START, CC2420_STOP;
+ 2:    loop do
+ 3:        await CC2420_START;
+ 4:        par/or do
+ 5:            await CC2420_STOP;
+ 6:        with
+ 7:            // loop with other nested trails
+ 8:            // to receive radio packets
+ 9:            <...>
+10:        end
+11:    end
 \end{verbatim}
 }%
 \rule{8.5cm}{0.37pt}
@@ -508,17 +550,19 @@ and another to actually receive radio messages in a loop.
 \label{lst.radio}
 }
 \end{figure}
-
-As compositions can be nested, the receive loop can be as complex as needed, 
+%
+As compositions can be nested, the receiving loop can be as complex as needed, 
 but once an external request to stop the driver is triggered, the \code{par/or} 
 composition kills all nested trails and proceeds to the statement in sequence.
 In this case, the top-level loop restarts, waiting again for the start event.
 
 The \code{par/or} construct is regarded as an \emph{orthogonal preemption 
 primitive}~\cite{esterel.preemption} because the two sides in the composition 
-do not know when and why they get killed.
-Furthermore, they need not to be tweaked with synchronization primitives or 
-state variables in order to be affected by related trails in parallel.
+need not to be tweaked with synchronization primitives or state variables in
+order to be affected by the other side in parallel.
+It is known that traditional multi-threaded languages cannot express thread 
+termination safely~\cite{esterel.preemption,sync_async.threadsstop}, thus being 
+incompatible with a \code{par/or} construct.
 
 \begin{comment}
 The same start/stop control pattern for the radio driver appears in all ported 
@@ -561,9 +605,9 @@ Conceptually, a program takes no time on step 2 and is always idle on step 3.
 In practice, if a new external input event occurs while a reaction chain is 
 running (step 2), it is enqueued to run in the next reaction.
 %, because reaction chains must run to completion.
-
+%
 % TODO: a similar approach is taken in \cite{...}
-
+%
 When multiple trails are active at a time (i.e. awaking from the same event), 
 \CEU schedules them in the order they appear in the program text.
 This policy is somewhat arbitrary, but provides a priority scheme for trails, 
@@ -575,30 +619,36 @@ As reaction times are assumed to be instantaneous, the blinking loop takes
 exactly 3 seconds.
 Hence, after 20 iterations, the accumulated time becomes 1 minute and the loop 
 terminates concurrently with the 1-minute timeout in parallel.
-Given that the blinking trail is defined first, the loop restarts and turns on 
-the LED for the last time.
-Then, the blinking trail awaits again, and the 1-minute timeout is scheduled 
-and kills the whole \code{par/or}.
+Given that the blinking trail appears first, the loop restarts and turns on the 
+LED for the last time.
+Then, the 1-minute timeout is scheduled, kills the whole \code{par/or}, and 
+turns off the LED.
+%
 This reasoning is reproducible in practice, and the LED will light on exactly 
 21 times for every execution of this program.
 First-class timers are discussed in more depth in Section~\ref{sec.ceu.time}.
+%
+Note that this static inference cannot be easily extracted from the other 
+implementations of Figure~\ref{lst.all}, specially considering the presence of 
+timers.
 
-The described behavior is known as \emph{weak abortion}, because the blinking 
-trail has the chance to execute for the last time.
-By inverting the two trails, the \code{par/or} terminates immediately, and the 
-blinking trail does not execute, qualifying a \emph{strong 
-abortion}.~\cite{esterel.preemption}
-
+The described behavior for the last iteration of the loop is known as 
+\emph{weak abortion}, because the blinking trail had the chance to execute for 
+the last time.
+By inverting the two trails, the \code{par/or} would terminate immediately, and 
+the blinking trail would not execute, qualifying a \emph{strong 
+abortion}~\cite{esterel.preemption}.
+%
 \CEU not only provides means to choose between weak and strong abortion, but 
-also detects the two possibilities and issues a warning at compile time (to be 
-discussed in Section~\ref{sec.ceu.shared}).
+also detects the two conflicting possibilities and issues a warning at compile 
+time (to be discussed in Section~\ref{sec.ceu.shared}).
 
 Reactions to the environment should run in bounded time to guarantee that 
 programs are responsive and can handle upcoming input events.
 Similarly to Esterel~\cite{esterel.ieee91}, \CEU requires that each possible 
 path in a loop body contains at least one \code{await} or \code{break} 
 statement, thus ensuring that loops never run in unbounded time.
-
+%
 Consider the examples that follow:
 
 {\small
@@ -630,17 +680,17 @@ this is a reasonable price to pay in order to achieve higher reliability.
 \subsection{Shared-memory concurrency}
 \label{sec.ceu.shared}
 
-WSNs applications make extensive use of shared memory, such as memory pools, 
-message queues, routing tables, etc.
+WSNs applications make extensive use of shared memory, such as for handling 
+memory pools, message queues, routing tables, etc.
 Hence, an important goal of \CEU is to ensure a reliable execution for 
-concurrent programs that use shared memory.
+concurrent programs that share memory.
 
 Concurrency in \CEU is characterized when two or more trails segments execute 
 during the same reaction chain.
 A trail segment is a sequence of statements separated by an \code{await}.
 
-In first example that follows, the assignments run concurrently, because both 
-trail segments are spawned during the same reaction chain.
+In the first example that follows, the assignments run concurrently, because 
+both trail segments are spawned during the same reaction chain.
 However, in the second example, the assignments are never concurrent, because 
 $A$ and $B$ represent different external events and the respective segments can 
 never execute during the same reaction chain:
@@ -678,7 +728,7 @@ end
 Note that although variable $v$ is accessed concurrently in the first example, 
 the assignments are both atomic and deterministic (given the run to completion 
 semantics and the scheduling policy): the final value of $v$ is always $2$.
-
+%
 However, programs with concurrent accesses to shared memory are suspicious, 
 because an apparently innocuous reordering of trails modifies the semantics of 
 the program.
@@ -687,18 +737,17 @@ the program.
 %manipulation (e.g., accessing buffers from device drivers).
 
 We developed a compile-time temporal analysis for \CEU in order to detect 
-concurrent accesses to shared variables:
-If a variable is written in a trail segment, then a concurrent trail segment 
-cannot read or write to that variable, nor dereference a pointer of that 
-variable type.
+concurrent accesses to shared variables, as follows:
+\emph{if a variable is written in a trail segment, then a concurrent trail 
+segment cannot read or write to that variable, nor dereference a pointer of 
+that variable type.}
 An analogous policy is applied for pointers vs variables and pointers vs 
 pointers.
-
-For each variable access, the algorithm holds the set of all possible preceding 
-\code{await} statements.
+For each variable access, the analysis algorithm holds the set of all possible 
+preceding \code{await} statements.
 Then, the sets for all accesses in parallel trails are compared to assert that 
 no \code{await} statements are shared.
-Otherwise the compiler warns the programmer about the suspicious accesses.
+Otherwise the compiler warns about the suspicious accesses.
 
 Consider the three examples of Figure~\ref{lst.det}.
 The first code is detected as suspicious, given that both assignments may be 
@@ -794,28 +843,28 @@ end
 }
 \end{figure}
 
+Weak and strong abortions, as presented in Section~\ref{sec.ceu.det}, are also 
+detected with the proposed algorithm.
+Instead of accesses to variables, the algorithm asserts that no join points of 
+a \code{par/or} execute concurrently with a nested trail in parallel, issuing a 
+warning otherwise.
+
 The proposed static analysis is only possible due to syntactic compositions, 
 which provide precise information about the flow of trails, i.e., which run in 
 parallel and which are guaranteed to be in sequence.
+Such information cannot be inferred when the program control relies on state 
+variables.
 
 We also implemented an alternative algorithm that converts a \CEU program into 
 a deterministic finite automata.
 The resulting DFA represents all possible points a program can reach during 
 runtime and, hence, eliminates all false positives.
-However, the algorithm is exponential and may be impractical in many 
+However, the algorithm is exponential and may be impractical in some 
 situations.
-
+%
 That said, we run the simpler static analysis for all ports presented in 
-Section~\ref{sec.eval} and no false positives were detected, suggesting that 
-the algorithm is practical.
-
-Weak and strong abortions, as presented in Section~\ref{sec.ceu.det}, are also 
-detected with the proposed algorithm.
-Instead of accesses to variables, the algorithm asserts that no join points of 
-a \code{par/or} execute concurrently with a trail in parallel, issuing a 
-warning otherwise.
-
-% TODO: negligible time
+Section~\ref{sec.eval} (in negligible time) and no false positives were 
+detected, suggesting that the algorithm is practical.
 
 \subsection{Integration with $C$}
 \label{sec.ceu.c}
@@ -829,9 +878,7 @@ functionality the underlying platform already provides.
 In \CEU, any identifier prefixed with an underscore is repassed \emph{as is} to 
 the $C$ compiler that generates the final binary.
 This way, access to $C$ is seamless and, more importantly, easily trackable.
-
-% TODO: remove
-
+%
 \CEU also supports \emph{C~blocks} to define new symbols, as Figure~\ref{lst.c} 
 illustrates.
 All code inside ``\code{C do ... end}'' is also repassed to the $C$ compiler 
@@ -862,17 +909,16 @@ seamlessly passed back and forth between the languages.
 }
 \end{figure}
 
-$C$ calls are fully integrated with the static analysis of 
+$C$ calls are fully integrated with the static analysis presented in
 Section~\ref{sec.ceu.det} and cannot appear in concurrent trails segments, 
 given that \CEU has no knowledge about their side effects.
 Also, passing variables as parameters counts as read accesses to them, while 
 passing pointers counts as write accesses to those types (because functions may 
 dereference and assign to them).
-
+%
 This policy increases considerably the number of false positives in the 
 analysis, given that many functions can actually be safely called concurrently.
-Therefore, \CEU supports syntactic annotations that the programmer can use to 
-relax the policy explicitly:
+Therefore, \CEU supports syntactic annotations to relax the policy explicitly:
 
 \begin{itemize}
 \item The \code{pure} modifier declares a $C$ function that does not cause side 
@@ -890,10 +936,10 @@ The following code illustrates \CEU annotations:
 {\small
 \begin{verbatim}
     pure  _abs();      // 'abs' is side-effect free
-    deterministic      // 'led0Toggle' vs 'led1Toggle' is ok
+    deterministic      // 'led0Toggle' vs 'led1Toggle' is safe
         _Leds_led0Toggle with _Leds_led1Toggle;
     int*  buf1, buf2;  // point to different buffers
-    deterministic      // 'buf1' vs 'buf2' is ok
+    deterministic      // 'buf1' vs 'buf2' is safe
         buf1 with buf2;
 \end{verbatim}
 }
@@ -913,9 +959,9 @@ compiled correctly.
 % TODO: other languages dont as well
 On the one hand, $C$ calls must be carefully analyzed in order to keep programs 
 responsive.
-On the other hand, they also give the programmer means to circumvent the rigor 
-of \CEU in a well-marked way (the special underscore syntax).
-
+On the other hand, they also provide means to circumvent the rigor of \CEU in a 
+well-marked way (the special underscore syntax).
+%
 \begin{comment}
 This approach is also adopted by Esterel, which supports the \code{call} 
 primitive to execute code assumed to be instantaneous in the host 
@@ -923,9 +969,9 @@ language~\cite{esterel.primer}.
 In \CEU, we take a step further and statically detects when such calls may 
 execute concurrently, as discussed in the next section.
 \end{comment}
-
-Evidently, the programmer should only recur to $C$ for I/O operations that are 
-assumed to be instantaneous, but never for control activities.
+%
+Evidently, programs should only recur to $C$ for I/O operations that are 
+assumed to be instantaneous, but never for control purposes.
 % (e.g. interrupt handling).
 
 \subsection{Local scopes and finalization}
@@ -946,7 +992,7 @@ However, the unrestricted use of locals introduce subtle bugs when dealing with
 pointers and $C$ functions.
 Given that global $C$ functions outlive the scope of locals, a pointer passed 
 as parameter may be used after the referred variable goes out of scope, leading 
-to a \emph{dangling pointer}.
+to a dangling pointer.
 
 The code snippet in Figure~\ref{lst.local} was extracted from our port of the 
 CTP collection protocol~\cite{wsn.teps} to \CEU.
@@ -955,9 +1001,9 @@ beacon frames may be killed or restarted from multiple sources (protocol/radio
 stop, and local/network resend request, all collapsed in lines 3, 5, and 9).
 
 The sending loop (lines 7-18) awakes when the beacon timer expires (line 11).
-Note that the message buffer is declared only where it is required (line 12, in 
-the 6th depth-level of the program), but its reference is manipulated by two 
-$TinyOS$ global functions:
+The message buffer is declared only where it is required (line 12, in the 6th 
+depth-level of the program), but its reference is manipulated by two $TinyOS$ 
+global functions:
 \code{AMSend\_getPayload} (line 13), which gets the data region of the message 
 to be prepared (collapsed in line 14);
 and \code{AMSend\_send} (line 15), which requests the operating system to 
@@ -965,7 +1011,7 @@ actually send the message.
 As the radio driver runs asynchronously and holds a reference to the message 
 until it is completely transmitted, the sending trail may be killed in the 
 meantime, resulting in a dangling pointer in the program.
-
+%
 A possible solution is to include a call to \code{AMSend\_cancel} in all trails 
 that kill the sending trail.
 However, this would require to expand the scope of the message buffer and add a 
@@ -974,7 +1020,7 @@ complexity of the application.
 
 \CEU provides a safer and simpler solution with the following rule:
 \emph{$C$ calls that receive pointers require a finalization block to safely 
-handle variables going out of scope}.
+handle referred variables going out of scope}.
 This rule prevents the previous example to compile, forcing the relevant parts 
 to be be rewritten as
 
@@ -996,12 +1042,11 @@ to be be rewritten as
 First, the \code{nohold} annotation informs the compiler that the referred $C$ 
 function does not require finalization code because it does not hold 
 references.
-Second, the \code{finalize} construct automatically registers the \code{with} 
-clause to execute when the variable passed as parameter in the \code{finalize} 
-clause goes out of scope.
+Second, the \code{finalize} construct automatically executes the \code{with} 
+clause when the variable passed as parameter in the \code{finalize} clause goes 
+out of scope.
 This way, regardless of how the sending loop is killed, the finalization code 
-always executes and politely informs the OS to cancel the ongoing send 
-operation.
+politely requests the OS to cancel the ongoing send operation.
 
 \begin{figure}[t]
 %\rule{8.5cm}{0.37pt}
@@ -1015,7 +1060,7 @@ operation.
  6:  with
  7:      loop do
  8:          par/or do
- 9:              <...>   // resend
+ 9:              <...>   // resend request
 10:          with
 11:              await (dt) ms;  // beacon timer expired
 12:              var _message_t msg;
@@ -1042,12 +1087,14 @@ Activities that involve reactions to \emph{wall-clock time}%
 By wall-clock time we mean the passage of time from the real world, measured in 
 hours, minutes, etc.
 }
-appear in typical patterns of WSNs, such as sensor sampling and timeouts.
+appear in typical patterns of WSNs, such as sensor sampling and activity 
+timeouts.
 However, support for wall-clock time is somewhat low-level in existing 
 languages, usually through timer callbacks or sleep blocking calls.
-
+%
 In any concrete system implementation, a requested timeout does not expire 
-precisely with zero-delay, a fact that is usually ignored by programmers.
+precisely with zero-delay, a fact that is usually ignored in the development 
+process.
 We define the difference between the requested timeout and the actual expiring 
 time as the \emph{residual delta time (delta)}.
 Without explicit manipulation, the recurrent use of timed activities in 
@@ -1070,7 +1117,7 @@ As an example, consider the following program:
 
 Suppose that after the first \code{await} request, the underlying system gets 
 busy and takes 15ms to check for expiring awaits.
-The scheduler will notice that the \code{await 10ms} has not only already 
+The \CEU scheduler will notice that the \code{await 10ms} has not only already 
 expired, but delayed with \code{delta=5ms}.
 Then, the awaiting trail awakes, sets \code{v=1}, and invokes \code{await 1ms}.
 However, the current delta is higher than the requested timeout (i.e. $5ms > 
@@ -1079,9 +1126,9 @@ However, the current delta is higher than the requested timeout (i.e. $5ms >
 
 \CEU also takes into account the fact that time is a physical quantity that can 
 be added and compared.
-For instance, for the program that follows, although \CEU cannot guarantee that 
-the first trail terminates exactly in 11ms, it can at least ensure that the 
-program always returns $1$:
+For instance, for the program that follows, although the scheduler cannot 
+guarantee that the first trail terminates exactly in 11ms, it can at least 
+ensure that the program always returns $1$:
 
 %\begin{figure}[t]
 %\rule{8.5cm}{0.37pt}
@@ -1128,28 +1175,28 @@ follow a stack policy.
 In practical terms, this means that a trail that emits an internal event pauses 
 until all trails awaiting that event completely react to it, continuing to 
 execute afterwards.
-
+%
 Another difference to external events is that internal events occur in the same 
 reaction chain they are emitted, i.e., an \code{emit} instantaneously matches 
 and awakes all correspondent \code{await} statements that were invoked in 
-\emph{previous reaction chains}%
-\footnote{An \code{await} cannot awake on the same reaction chain it is 
-invoked.}.
+\emph{previous reaction chains}.
+In order to ensure bounded execution, an \code{await} statement cannot awake on 
+the same reaction chain it is invoked.
 
 The stacked execution for internal events introduces support for a restricted 
 form of subroutines that cannot express recursive definitions (either directly 
-or indirectly), resulting in bounded memory and execution times.
+or indirectly), resulting in bounded memory and execution time.
 % that preclude stack overflows.
 % TODO: exec bounded
 % TODO: why?
-
+%
 Figure~\ref{lst.func} shows how the dissemination trail from our port of the 
 DRIP protocol to \CEU can be invoked from different parts of the program, just 
 like subroutines.
 The DRIP protocol distinguishes from data and metadata packets and disseminates 
 one or the other based on external requests.
 For instance, when the trickle timer expires, the program invokes 
-\code{emit~send=0}, which awakes the dissemination trail and starts sending a 
+\code{emit~send=1}, which awakes the dissemination trail and starts sending a 
 metadata packet.
 If the trail is already sending a packet, than the \code{emit} does not match 
 the \code{await} and will have no effect (just like the \emph{nesC} 
@@ -1165,19 +1212,19 @@ event int send;
 par do
     <...>
         await DRIP_KEY;
-        emit send=1;        // broadcast data
+        emit send=0;        // broadcast data
 with
     <...>
         await DRIP_TRICKLE;
-        emit send=0;        // broadcast meta
+        emit send=1;        // broadcast meta
 with
     <...>
         var _message_t* msg = await DRIP_DATA_RECEIVE;
         <...>
-        emit send=1;        // broadcast data
+        emit send=0;        // broadcast data
 with
     loop do
-        var int data? = await send;
+        var int isMeta = await send;
         <...>   // send data or metadata
     end
 end
@@ -1198,9 +1245,9 @@ After awaking from a new packet notification (line 4), the program enters in a
 sequence to read the bytes from the hardware buffer (lines 8-17).
 If any anomaly is found on the received data, the program invokes 
 \code{emit~next} to discard the current packet (lines 10,14).
-Given the stacked execution for internal events, the \code{emit} invocation is 
-stacked, awaking the trail in line 6, which terminates and kills the whole 
-\code{par/or} in which the emitting trail is blocked.
+Given the execution semantics of internal events, the \code{emit} continuation 
+is stacked and awakes the trail in line 6, which terminates and kills the whole 
+\code{par/or} in which the emitting trail is paused.
 This way, the continuation for the \code{emit} never resumes, and the loop 
 restarts to await the next packet.
 
@@ -1649,6 +1696,8 @@ The send/cancel pattern occurs in all ported applications that use the radio
 for communication evaluated in Section~\ref{sec.eval}.
 % TODO: expand
 
+% reproducibility, does not depend on the platform
+
 
 * static analysis
 
@@ -1666,6 +1715,15 @@ nesC no
 * timers
 
 * locals
+
+- automatically
+    - timer, loops, recursion
+    - C is easily trackable
+- manually
+    - shared memory
+    - calls
+    - abortion
+    - finalization
 
 %\subsection{Discussion}
 
@@ -1700,9 +1758,11 @@ Sol~\cite{wsn.sol} (indicated by the gray background).
 \CEU differs from these on the stack-based semantics for internal events, which 
 is essential to bring other control mechanisms, such as exceptions, as 
 discussed in Section~\ref{sec.ceu.ints}.
-It is known that languages with preemptive scheduling cannot express thread 
-termination safely~\cite{esterel.preemption,sync_async.threadsstop}, being 
-unsuitable for a \code{par/or} construct.
+
+% TODO:
+%It is known that languages with preemptive scheduling cannot express thread 
+%termination safely~\cite{esterel.preemption,sync_async.threadsstop}, being 
+%unsuitable for a \code{par/or} construct.
 
 The two columns under \emph{Memory} list language support for \emph{code 
 reentrancy} and \emph{local scopes} for variables, which account for saving ROM 
@@ -2316,9 +2376,6 @@ This semantics has more proximity with that of electronic circuits, but
 simultaneous events would inhibit the temporal analysis of \CEU.
 For instance, variable manipulation in Esterel is restricted to a single 
 process (trail in \CEU).
-
-
-
 
 \end{comment}
 
