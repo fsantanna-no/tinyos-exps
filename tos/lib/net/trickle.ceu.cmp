@@ -1,10 +1,6 @@
 @define(AWAIT, `
-loop do
-    tmp int id_ = await $1;
-    if id_ == this.id then
-        break;
-    end
-end
+    var int id = await $1
+        until id == this.id;
 ')
 class Trickle with
     var u8 id;

@@ -1,7 +1,3 @@
-interface Global with
-    event _srp_forward_t* go_forward;
-end
-event _srp_forward_t* go_forward;
 class Client with
     var u8 id;
 do
@@ -34,13 +30,11 @@ do
     end
 end
 class Forwarder with
-    var _message_t* msg;
+    var   _message_t*     msg;
+    event _srp_forward_t* go;
 do
     loop do
-        tmp _srp_forward_t* fwd = await global:go_forward;
-        if fwd:gotcha then
-            continue;
-        end
+        tmp _srp_forward_t* fwd = await this.go;
         fwd:gotcha = 1;
             msg = * (fwd:msg);
         * (fwd:msg) = msg;
@@ -51,7 +45,7 @@ do
                            msg, len)
             done = await SRP_SENDDONE;
             if done:msg == msg then
-                break;
+                reak;
             end
         end
     end
@@ -88,7 +82,12 @@ loop do
                     fwd.msg    = recv:msg;
                     fwd.len    = recv:len;
                     fwd.gotcha = 0;
-                emit go_forward = & fwd;
+                loop i, FORWARD_COUNT do
+                    emit forwarders [i] .go = & fwd;
+                    if fwd.gotcha then
+                        break;
+                    end
+                end
             end
         end
     end

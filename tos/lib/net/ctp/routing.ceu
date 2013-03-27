@@ -159,7 +159,7 @@ par do
                         // send beacon
 // LOCALS!!
                         var _message_t             msg;
-                        tmp _ctp_routing_header_t* pay =
+                        var _ctp_routing_header_t* pay =
                             _BeaconSend_getPayload(&msg, _BeaconSend_maxPayloadLength());
                         // TODO: assert is missing on .orig
 
@@ -179,12 +179,12 @@ par do
                                         _LinkEstimator_getLinkQuality(_glb_routeInfo.parent);
                         end
 
-                        tmp u8 eval;
+                        var u8 eval;
                         eval = _BeaconSend_send(_AM_BROADCAST_ADDR,
                                                     &msg,
                                                     sizeof<_ctp_routing_header_t>)
                             finalize with
-                                _BeaconSend_cancel(&msg);
+                                do end; //_BeaconSend_cancel(&msg);
                             end;
                         if eval == _SUCCESS then
                             await CTP_ROUTE_RADIO_SENDDONE;
@@ -227,13 +227,13 @@ with
     end
 with
     loop do
-        tmp _message_t* msg = await CTP_ROUTE_RADIO_RECEIVE;
+        var _message_t* msg = await CTP_ROUTE_RADIO_RECEIVE;
         //if _BeaconSend_payloadLength(msg) == sizeof<_ctp_routing_header_t> then
-            tmp _am_addr_t from = _AMPacket_source(msg);
-            tmp _ctp_routing_header_t* pay = <_ctp_routing_header_t*>
+            var _am_addr_t from = _AMPacket_source(msg);
+            var _ctp_routing_header_t* pay = <_ctp_routing_header_t*>
                 _BeaconSend_getPayload(msg, sizeof<_ctp_routing_header_t>);
 
-            tmp s8 congested? = _CtpRoutingPacket_getOption(msg, _CTP_OPT_ECN);
+            var s8 congested? = _CtpRoutingPacket_getOption(msg, _CTP_OPT_ECN);
 
             if pay:parent != _INVALID_ADDR then
                 if pay:etx == 0 then

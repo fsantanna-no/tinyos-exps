@@ -9,7 +9,7 @@ C
     _srp_send_t     = sizeof<_message_t*,u16*,u8,u8,u8>,
     _srp_senddone_t = sizeof<_message_t*,u8>,
     _srp_receive_t  = sizeof<_message_t**,u8>,
-    _srp_forward_t  = sizeof<_message_t,u8>;
+    _srp_forward_t  = sizeof<_message_t*,u8>;
     C do
         typedef struct {
             message_t** msg;
@@ -46,8 +46,8 @@ GLOBALS:
 nesC: state(4), seqno, MsgPool, EntryPool, Queue
       msg, len, client, clientEntries, clientStatus
 
-Céu:  ......., seqno,  MsgPool, forwarders, .....
-      msg  ...,   id,   clients,      ............
+Céu:  ......., seqno,  MsgPool, Fwds(2),   .....
+      msg  len(2),  id,   Clts(2),       ............
 
 state:
 clientStatus:
@@ -57,35 +57,23 @@ len: 2nd
 
 */
 
-interface Global with
-    event _srp_forward_t* go_forward;
-end
-
-event _srp_forward_t* go_forward;
-
 class Client with
     var u8 id;
 do
     var u8 seqno = 0;
 
     loop do
-        tmp _srp_send_t* snd;
+        var _srp_send_t* snd =
+            await SRP_SEND
+                until snd:client == this.id;
 
-        // TODO
-        loop do
-            snd = await SRP_SEND;
-            if snd:client == this.id then
-                break;
-            end
-        end
-
-        tmp _nx_am_addr_t[SRP_MAX_PATHLEN] nxPath;
+        var _nx_am_addr_t[SRP_MAX_PATHLEN] nxPath;
         loop i, snd:pathLen do
             nxPath[i] = snd:path[i];
         end
         _SourceRoutePacket_setRoute(snd:msg, nxPath, snd:pathLen);
 
-        tmp _sr_header_t* hdr = _getSRPHeader(snd:msg);
+        var _sr_header_t* hdr = _getSRPHeader(snd:msg);
         hdr:payload_id = 1;
         hdr:payload_id = _SourceRouteId_fetch(this.id);
         hdr:seqno      = seqno;
@@ -93,14 +81,14 @@ do
 
         seqno = seqno + 1;
 
-        tmp _srp_senddone_t* done;
+        var _srp_senddone_t* done;
 
         loop do
             var _message_t* snd_msg = snd:msg;
-            _SubSend_send(_SourceRoutePacket_getNextHop(snd:msg),
-                          snd:msg, snd:len + sizeof<_sr_header_t>)
+            var u16 dst = _SourceRoutePacket_getNextHop(snd:msg);
+            _SubSend_send(dst, snd:msg, snd:len + sizeof<_sr_header_t>)
                 finalize with
-                    _SubSend_cancel(snd:msg);
+                    do end; //_SubSend_cancel(snd:msg);
                 end;
 
             // TODO
@@ -112,19 +100,17 @@ do
 
         _SourceRouteSend_sendDone(this.id, done:msg, done:error)
             finalize with
-                _SourceRouteSend_cancel(done:msg);
+                do end; //_SourceRouteSend_cancel(done:msg);
             end;
     end
 end
 
 class Forwarder with
-    var _message_t* msg;
+    var   _message_t*     msg;
+    event _srp_forward_t* go;
 do
     loop do
-        tmp _srp_forward_t* fwd = await global:go_forward;
-        if fwd:gotcha then
-            continue;
-        end
+        var _srp_forward_t* fwd = await this.go;
         fwd:gotcha = 1;
 
         finalize
@@ -134,8 +120,7 @@ do
         end
         *(fwd:msg) = msg;
 
-        tmp _srp_senddone_t* done;
-        tmp u8 len = fwd:len;
+        var u8 len = fwd:len;
 
         loop do
             _SubSend_send(_SourceRoutePacket_getNextHop(msg),
@@ -143,7 +128,7 @@ do
                 finalize with nothing; end;     // msg is global
 
             // TODO
-            done = await SRP_SENDDONE;
+            var _srp_senddone_t* done = await SRP_SENDDONE;
             if done:msg == msg then
                 break;
             end
@@ -158,8 +143,8 @@ loop i, FORWARD_COUNT do
     msgs[i] = &msgs_buf[i];
 end
 
-    await SRP_START;
 loop do
+    await SRP_START;
 
     par/or do
         await SRP_STOP;
@@ -176,9 +161,9 @@ loop do
         end
 
         loop do
-            tmp _srp_receive_t* recv = await SRP_RECEIVE;
+            var _srp_receive_t* recv = await SRP_RECEIVE;
 
-            tmp _sr_header_t* hdr = _getSRPHeader(*(recv:msg));
+            var _sr_header_t* hdr = _getSRPHeader(*(recv:msg));
 
             if hdr:hops_left == 0 then
                 _Receive_receive(hdr:payload_id, *(recv:msg),
@@ -187,11 +172,16 @@ loop do
                                   recv:len - sizeof<_sr_header_t>);
             else
                 hdr:hops_left = hdr:hops_left - 1;
-                tmp _srp_forward_t fwd;
+                var _srp_forward_t fwd;
                     fwd.msg    = recv:msg;
                     fwd.len    = recv:len;
                     fwd.gotcha = 0;
-                emit go_forward=&fwd;
+                loop i, FORWARD_COUNT do
+                    emit forwarders[i].go=&fwd;
+                    if fwd.gotcha then
+                        break;
+                    end
+                end
             end
         end
     end

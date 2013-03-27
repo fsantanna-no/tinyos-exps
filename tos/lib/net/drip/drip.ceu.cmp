@@ -7,12 +7,8 @@ loop do
     await DRIP_STOP;
 end
 @define(AWAIT, `
-loop do
-    tmp u16 key_ = await $1;
-    if key_ == this.key then
-        break;
-    end
-end
+    var u16 key = await $1
+        until key == this.key;
 ')
 class Drip with
     var u16 key;

@@ -1,4 +1,4 @@
-@define(NUM_TRICKLES, 4)    // TODO: manual
+@define(NUM_TRICKLES, 1)    // TODO: manual
 
 C _Random_rand16();
 C constant _TRICKLE_TAU_H, _TRICKLE_TAU_L, _TRICKLE_K, _TRICKLE_SCALE;
@@ -10,12 +10,8 @@ input  int  TRICKLE_RESET;
 input  int  TRICKLE_INC;
 
 @define(AWAIT, `
-loop do
-    tmp int id_ = await $1;
-    if id_ == this.id then
-        break;
-    end
-end
+    var int id = await $1
+        until id == this.id;
 ')
 
 /*
@@ -63,7 +59,7 @@ do
                             count = count + 1;
                         end
                     with
-                        tmp u16 dt_ = (tau/2) + (_Random_rand16()+1) % (tau/2);
+                        var u16 dt_ = (tau/2) + (_Random_rand16()+1) % (tau/2);
                         await (dt_ << (_TRICKLE_SCALE-1)) ms;
                         if count < _TRICKLE_K then
                             emit TRICKLE_FIRED(this.id);
