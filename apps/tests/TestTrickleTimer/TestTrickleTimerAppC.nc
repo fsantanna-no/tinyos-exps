@@ -1,4 +1,4 @@
-// $Id: TestTrickleTimerAppP.nc,v 1.6 2010-06-29 22:07:25 scipio Exp $
+// $Id: TestTrickleTimerAppC.nc,v 1.6 2010-06-29 22:07:25 scipio Exp $
 /*
  * Copyright (c) 2006 Stanford University. All rights reserved.
  *
@@ -36,89 +36,35 @@
  * @date   Jan 7 2006
  */ 
 
-module TestTrickleTimerAppP {
-  provides interface Init;
-  uses {
-    interface Boot;
-    interface TrickleTimer as TimerA;
-/*
-    interface TrickleTimer as TimerB;
-    interface TrickleTimer as TimerC;
-    interface TrickleTimer as TimerD;
-*/
-    interface Random;
-  }
+configuration TestTrickleTimerAppC {
 }
 implementation {
-
-  bool a = 0;
-  bool b = 0;
+  components TestTrickleTimerAppP, MainC, RandomC;
+  components new TestTrickleTimerC() as TimerA;
 /*
-  bool c = 0;
-  bool d = 0;
+  components new TestTrickleTimerC() as TimerB;
+  components new TestTrickleTimerC() as TimerC;
+  components new TestTrickleTimerC() as TimerD;
 */
-
-  command error_t Init.init() {return SUCCESS;}
+  components new TimerMilliC();
+  components new BitVectorC(1) as PendingVector;
+  components new BitVectorC(1) as ChangeVector;
   
-  event void Boot.booted() {
-    a = 1;
-    call TimerA.reset();
-    call TimerA.start();
-  }
-
-  event void TimerA.fired() {
-    dbg("TestTrickle", "   Timer A fired at %s\n", sim_time_string());
-    if (!b) {
+  //  Timer.Timer -> TimerMilliC;
+  //Timer.Random -> RandomC;
+  //Timer.Changed -> ChangeVector;
+  //Timer.Pending -> PendingVector;
+  
+  MainC.SoftwareInit -> TestTrickleTimerAppP;
+  TestTrickleTimerAppP.Boot -> MainC.Boot;
+  
+  TestTrickleTimerAppP.TimerA -> TimerA;
 /*
-      call TimerB.reset();
-      call TimerB.start();
+  TestTrickleTimerAppP.TimerB -> TimerB;
+  TestTrickleTimerAppP.TimerC -> TimerC;
+  TestTrickleTimerAppP.TimerD -> TimerD;
 */
-      b = 1;
-    }
-  }
-  
-/*
-  event void TimerB.fired() {
-    dbg("TestTrickle", "  Timer B fired at %s\n", sim_time_string());
-    if (!c) {
-    call TimerC.reset();
-      call TimerC.start();
-      b = 1;
-    }
-  }
-  
-  
-  event void TimerC.fired() {
-    dbg("TestTrickle", " Timer C fired at %s\n", sim_time_string());
-    if (!d) {
-      call TimerD.reset();
-      call TimerD.start();
-      b = 1;
-    }
-  }
-
-  uint16_t i = 0;
-  event void TimerD.fired() {
-    dbg("TestTrickle", "Timer D fired at %s\n", sim_time_string());
-    i = call Random.rand16();
-    i = i % 4;
-    switch (i) {
-    case 0:
-      call TimerA.reset();
-      break;
-    case 1:
-      call TimerB.reset();
-      break;
-    case 2:
-      call TimerC.reset();
-      break;
-    case 3:
-      call TimerD.reset();
-      break;
-    }
-  }
-*/
-
+  TestTrickleTimerAppP.Random -> RandomC;
 }
 
   
