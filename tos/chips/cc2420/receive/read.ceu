@@ -86,6 +86,12 @@ end
 
 @AWAIT();
 
+/***
+if 1 then
+    continue;
+end
+***/
+
 _CSN_set();
 
 // new packet is buffered up, or we don't have timestamp in fifo, or ack
@@ -118,23 +124,6 @@ if (buf[ rxFrameLength ] >> 7) and t:rx_buf then
     var u8 type = ( header:fcf >> _IEEE154_FCF_FRAME_TYPE ) & 7;
     _CC2420Receive_receive(type, _m_p_rx_buf);
     if type == _IEEE154_TYPE_DATA then
-        //post receiveDone_task();
-        var _cc2420_metadata_t* metadata =
-                _CC2420PacketBody_getMetadata(_m_p_rx_buf);
-        var _cc2420_header_t* header_ =
-                _CC2420PacketBody_getHeader(_m_p_rx_buf);
-        var u8 length = header_:length;
-        var u8 tmpLen = sizeof<_message_t> -
-                        (_OFF1 - sizeof<_cc2420_header_t>);
-        var u8* buf_ = <u8*> header_;
-
-        metadata:crc = buf_[ length ] >> 7;
-        metadata:lqi = buf_[ length ] & 0x7f;
-        metadata:rssi = buf_[ length - 1 ];
-
-        if (_passesAddressCheck(_m_p_rx_buf) and length>=_CC2420_SIZE) then
-            _m_p_rx_buf = _Receive_receive(_m_p_rx_buf, _m_p_rx_buf:data,
-                                            length - _CC2420_SIZE);
-        end
+        _receiveDone(); // post
     end
 end

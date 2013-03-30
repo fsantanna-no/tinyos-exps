@@ -111,6 +111,8 @@ event void RXFIFO.readDone (uint8_t* rx_buf, uint8_t rx_len,
                 CC2420Receive.receive ( type, m_p_rx_buf );
                 if (type == IEEE154_TYPE_DATA) {
                     receiveDone_task ();
+                    receivingPacket = FALSE;
+                    waitForNextPacket ();
                     return;
                 }
             }
@@ -122,23 +124,6 @@ event void RXFIFO.readDone (uint8_t* rx_buf, uint8_t rx_len,
             SpiResource.release ();
             break;
     }
-}
-void receiveDone_task () {
-    cc2420_metadata_t* metadata = CC2420PacketBody.getMetadata (m_p_rx_buf);
-    cc2420_header_t* header = CC2420PacketBody.getHeader (m_p_rx_buf);
-    uint8_t length = header->length;
-    uint8_t tmpLen = sizeof (message_t) - (offsetof (message_t, data)
-                    - sizeof (cc2420_header_t));
-    uint8_t* buf = (uint8_t*) header;
-    metadata->crc = buf [length] >> 7;
-    metadata->lqi = buf [length] & 0x7f;
-    metadata->rssi = buf [length - 1];
-    if (passesAddressCheck (m_p_rx_buf) && length >= CC2420_SIZE) {
-        m_p_rx_buf = Receive.receive (m_p_rx_buf, m_p_rx_buf->data,
-                       length - CC2420_SIZE);
-    }
-    receivingPacket = FALSE;
-    waitForNextPacket ();
 }
 void beginReceive () {
     m_state = S_RX_LENGTH;

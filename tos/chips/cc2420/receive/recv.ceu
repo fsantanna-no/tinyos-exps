@@ -37,8 +37,7 @@ C
 
 C pure
     _CC2420PacketBody_getHeader(),
-    _CC2420PacketBody_getMetadata(),
-    _passesAddressCheck();
+    _CC2420PacketBody_getMetadata();
 
 C nohold
     _CC2420Receive_receive(),       // user can't hold msg
@@ -63,7 +62,8 @@ C
     _SpiResource_immediateRequest(),
     _SpiResource_isOwner(),
     _SpiResource_release(),
-    _SpiResource_request();
+    _SpiResource_request(),
+    _receiveDone();
 
 /*
 GLOBALS:

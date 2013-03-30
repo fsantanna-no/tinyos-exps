@@ -100,11 +100,11 @@ configuration CtpP {
 
 implementation {
   enum {
-    CLIENT_COUNT = uniqueCount(UQ_CTP_CLIENT),
-    FORWARD_COUNT = 0,  // TODO
-    TREE_ROUTING_TABLE_SIZE = 10,
-    QUEUE_SIZE = CLIENT_COUNT + FORWARD_COUNT,
-    CACHE_SIZE = 4,
+    CLIENT_COUNT = 0,  //uniqueCount(UQ_CTP_CLIENT),
+    FORWARD_COUNT = 0, //12,
+    TREE_ROUTING_TABLE_SIZE = 0, //10,
+    QUEUE_SIZE = 0, //CLIENT_COUNT + FORWARD_COUNT,
+    CACHE_SIZE = 0, //4,
   };
 
   components ActiveMessageC;
