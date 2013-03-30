@@ -2,6 +2,11 @@
 
 %\usepackage{afterpage}
 \usepackage{balance}
+\usepackage{color}
+\usepackage{fancyvrb}
+\usepackage{listings}
+\usepackage[utf8]{inputenc}
+\usepackage[usenames,dvipsnames]{xcolor}
 \usepackage{verbatim}
 \usepackage{xspace}
 %\usepackage{amssymb}
@@ -16,6 +21,15 @@
 %\hypersetup{pdfstartview=FitH}
 \usepackage{graphicx}
 \usepackage{url}
+
+\newcommand{\footnoteremember}[2]{%
+\footnote{#2}%
+\newcounter{#1}%
+\setcounter{#1}{\value{footnote}}%
+}
+\newcommand{\footnoterecall}[1]{%
+\footnotemark[\value{#1}]%
+}
 
 %\renewcommand{\arraystretch}{1.2} % Space out rows in tables
 
@@ -56,31 +70,32 @@
 \newcommand{\code}[1] {{\small{\texttt{#1}}}}
 \newcommand{\Code}[1] {\texttt{#1}}
 
-\begin{comment}
-\numberofauthors{2}
-
-\author{
-%
-% The command \alignauthor (no curly braces needed) should
-% precede each author name, affiliation/snail-mail address and
-% e-mail address. Additionally, tag each line of
-% affiliation/address with \affaddr, and tag the
-%% e-mail address with \email.
-\alignauthor Alice Security \\
-        \affaddr{Department of Computer Science}\\
-        \affaddr{University of Southern California}\\
-       \email{alice@example.edu}
-\alignauthor Bob Privacy \\
-    \affaddr{Networked Embedded Systems Group}\\
-    \affaddr{Swedish Institute of Computer Science}\\
-    \email{bob@example.se}
+\def\sharedaffiliation{%
+\end{tabular}
+\begin{tabular}{c}
 }
-%\author{
-    %{Francisco Sant'Anna} \\
-    %\affaddr{Departamento de Inform\'atica - PUC-Rio} \\
-    %\email{fsantanna@inf.puc-rio.br}
-%}
-\end{comment}
+
+\numberofauthors{5}
+\author{
+    \alignauthor Francisco Sant'Anna        \\
+        \email{fsantanna@inf.puc-rio.br}
+    \alignauthor Noemi Rodriguez            \\
+        \email{noemi@inf.puc-rio.br}
+    \alignauthor Roberto Ierusalimschy      \\
+        \email{roberto@inf.puc-rio.br}
+    \sharedaffiliation
+    \affaddr{Departamento de Inform\'atica --
+             PUC-Rio, Brazil}
+\vspace{0.5cm}
+\and
+    \alignauthor Olaf Landsiedel \\
+         \email{olafl@chalmers.se}
+    \alignauthor Philippas Tsigas \\
+         \email{tsigas@chalmers.se}
+    \sharedaffiliation
+    \affaddr{Computer Science and Engineering --
+             Chalmers University of Technology, Sweden}
+}
 
 %\title{Safe Concurrent Abstractions for Wireless Sensor Networks}
 %\title{Safe Synchronous Abstractions for Wireless Sensor Networks}
@@ -94,37 +109,38 @@
 
 \maketitle
 
+% TODO: CTP / DRIP ROM reduction
+
 \begin{abstract}
 
-Research in Wireless Sensor Networks conducts a continuous effort to reduce 
-programming complexity without introducing significant overheads.
-Multi-threaded and synchronous languages offer proper support for sequential 
-and structured programming, overcoming the difficulties of (still) prevailing 
-event-driven development.
-However, safety aspects in concurrent and control-intensive applications is not 
-taken into a greater extent in current designs, and most analysis and 
-mitigation efforts are delegated to programmers.
-% relying
-  
-We present a system language design that prioritizes safe concurrency, going
-beyond only \emph{providing} mechanisms, but rather \emph{enforcing} handling 
-threats at compile time.
-\CEU supports concurrent lines of execution that run in time steps and are 
-allowed to share variables.
-However, its synchronous and static nature enables a compile-time analysis that 
-ensures deterministic and memory-safe programs, even in the presence of 
-pointers and low-level system calls.
-Our proposed analysis pervades all language functionality, such as parallel 
-compositions, first-class timers, and internal event communication.
-We successfully ported existing network protocols and a radio driver to \CEU, 
-showing the applicability of our design in highly-constrained platforms.
-
-% TODO
-%Nevertheless, \CEU does not renounce to practical aspects, providing seamless 
-%integration with $C$ for low-level manipulation
+% TODO: split 2 sents.
+%Although there has been much research in facilitating programming WSNs,
+Despite the continuous research in facilitating programming WSNs,
+most safety analysis and mitigation efforts in control and concurrency are 
+still left to programmers, who must explicitly manage synchronization and 
+shared memory.
+% among activities.
 %
-%With a good balance between low-level and high-level functionality, \CEU{} 
-%fits the constrained requirements of embedded systems.
+We present a system language that ensures safe concurrency by enforcing the 
+handling of threats at compile time, rather than at runtime.
+%
+On the one hand, the synchronous and static foundation of our design allows for 
+a simple reasoning about concurrency that enables a compile-time analysis to 
+ensure deterministic and memory-safe programs.
+On the other hand, this design imposes limitations on the language 
+expressiveness, such as for doing computation-intensive operations and meeting 
+hard real-time responsiveness.
+% defining, doing, executing, describing
+%
+Nevertheless, we implemented a number of standard network protocols and a radio 
+driver in order to show that the achieved expressiveness and responsiveness is 
+sufficient for a wide range of WSNs applications.
+%
+Besides the ensured safety properties, the implementations show a reduction 
+around 25\% in code complexity, with a penalty of memory increase below 10\% in 
+terms of total ROM and RAM needs.
+% in terms of total ROM/RAM.
+%, and a negligible increase in CPU usage.
 
 \end{abstract}
 
@@ -137,6 +153,14 @@ showing the applicability of our design in highly-constrained platforms.
 %\terms{Delphi theory}
 
 %\keywords{ACM proceedings, \LaTeX, text tagging}
+
+%\category{D.3}{Programming Languages}{General}
+\category{D.3.3}{Programming Languages}{Language Constructs and Features}
+
+\terms{Design, Languages, Reliability}
+
+\keywords{Concurrency, Determinism, Safety, Static Analysis, Synchronous, 
+Wireless Sensor Networks}
 
 \section{Introduction}
 \label{sec.intro}
@@ -163,9 +187,9 @@ System-level development for WSNs basically consists of abstracting access to
 the hardware and designing specially tweaked network 
 protocols~\cite{wsn.tos,wsn.survey} to be further integrated as services in 
 higher-level applications or macro-programming systems~\cite{wsn.state_of_art}.
-The external environment plays an important, as it interacts with applications 
-permanently (and concurrently) by issuing events that represent expiring 
-timers, messages arrivals, sensor readings, etc.
+%The external environment plays an important, as it interacts with applications 
+%permanently (and concurrently) by issuing events that represent expiring 
+%timers, messages arrivals, sensor readings, etc.
 If (hard) timeliness cannot be met by WSNs applications, given their networked 
 nature, it is still paramount to have a reliable programming environment, 
 pushing to compile-time as much safety guarantees as 
@@ -202,46 +226,23 @@ primitives~\cite{wsn.mantisos,wsn.tinythreads}, or implicitly with cooperative
 scheduling~\cite{wsn.sol,wsn.nesc}.
 Requiring manual synchronization leads to potential safety 
 hazards~\cite{sync_async.threadsproblems}, while implicit synchronization is no 
-less questionable, as it assumes that \emph{all} accesses are potentially 
-dangerous.
+less questionable, as it assumes that \emph{all} accesses are dangerous.
 The bottom line is that existing languages cannot detect and enforce atomicity 
 only when they are required.
 %
 Furthermore, system-level development typically involves accesses to the 
 underlying platform through $C$ system calls that hold pointers for some time
 (e.g. transmission of a message buffer).
-Hence, programs can potentially have a \emph{dangling pointer} if the referred 
-memory is a local variable that goes out of scope.
-
-In this work, we present the design of \CEU%
-\footnote{C\'eu is the Portuguese word for \emph{sky}.}, a synchronous 
-system-level programming language based on Esterel~\cite{esterel.ieee91} that 
-provides a reliable yet powerful programming environment for WSNs.
-We explore the precious control information that can be inferred from thread
-compositions at compile time in order to embrace safety aspects to a greater 
-extent.
-%
-Currently, we focus only on \emph{concurrency safety}, rather than on 
-\emph{type safety}~\cite{wsn.safety}.%
-\footnote{
-We consider both safety aspects to be complimentary and orthogonal, i.e., 
-type-safety annotations could also be applied to \CEU.
-}
-
-\begin{comment}
-TODO
-\CEU is based on Esterel~\cite{esterel.ieee91} and follows a synchronous 
-execution model~\cite{rp.twelve}, which enforces a disciplined step-by-step 
-execution.
-\CEU relies on a compile-time analysis to detect unbounded loops and concurrent 
-access to variables.
-\end{comment}
+Hence, if a local variable goes out of scope and its reference has been 
+exposed, a system-level activity may end up with a dangling pointer (i.e. a 
+pointer to freed memory).
 
 \begin{figure*}[!t]
 %\rule{8.5cm}{0.37pt}
 \begin{minipage}[t]{0.24\linewidth}
 {\small
-\begin{verbatim}
+%\begin{Verbatim}[fontfamily=tt,frame=single]
+\begin{Verbatim}
 /*********** NESC ***********/
 event void Boot.booted () {
   call T1.startOneShot(0);
@@ -263,7 +264,7 @@ event void T2.fired () {
   call Leds.led0Off();
   <...> // CONTINUE
 }
-\end{verbatim}
+\end{Verbatim}
 }
 \end{minipage}
 %
@@ -346,73 +347,58 @@ _Leds_led0Off();
 }
 \end{figure*}
 
-Our overall contribution is the careful design of concurrent abstractions that 
-can detect safety threats at compile time, enforcing the rewriting of 
-suspicious code.
-As more specific contributions, we enumerate the following features:
+In this work, we present the design of \CEU%
+\footnote{C\'eu is the Portuguese word for \emph{sky}.},
+a synchronous system-level programming language that provides a reliable yet 
+powerful set of abstractions for the development of control-intensive WSNs 
+applications.
+%
+\CEU is based on Esterel~\cite{esterel.ieee91} and introduces the following new 
+safety mechanisms:
+\emph{first-class timers} to ensure that timers started in parallel remain 
+synchronized (not depending on internal reaction timings);
+\emph{finalization blocks} for local pointers going out of scope;
+and a \emph{stack-based event-driven communication} that avoids cyclic 
+dependencies.
+%
+Our overall contribution is a static analysis that considers all language 
+mechanisms and detects safety threats at compile time, such as concurrent 
+accesses to shared memory, and concurrent termination of timers and threads.
+%
+Currently, we focus only on \emph{concurrency safety}, rather than on 
+\emph{type safety}~\cite{wsn.safety}.%
+\footnote{
+We consider both safety aspects to be complimentary and orthogonal, i.e., 
+type-safety annotations could also be applied to \CEU.
+}
 
-\begin{itemize}
-\item A compile-time analysis for reliable shared-memory concurrency.
-\item A finalization mechanism to safely release resources just before they go 
-      out of scope.
-\item First-class timers with a predictable behavior.
-\item Stack-based inter-thread communication, which provides a restricted (but 
-      safer) form of subroutines.
-      % and can be used to handle exceptions.
-\item An object system that provides code reentrancy and enables the creation 
-      of higher-level abstractions.
-\end{itemize}
-
-As a limitation of the synchronous model, computations that run in unbounded 
-time (e.g., cryptography, image processing) do not fit the zero-delay reaction
-hypothesis~\cite{rp.hypothesis}, and cannot be elegantly implemented in \CEU.
+As a inherent limitation of \CEU's synchronous model, computations that run in 
+unbounded time (e.g., compression, image processing) do not fit the zero-delay 
+reaction hypothesis~\cite{rp.hypothesis}, and cannot be elegantly implemented.
+%
 Also, the static analysis precludes any dynamic support in the language, such 
 as memory allocation and dynamic loading.
-However, this trade-off seems to be favorable in the context of WSNs, as 
-dynamic features are discouraged due to resource constraints and safety 
-requirements.
-
-\begin{comment}
-Our design is first compromised with the main principles that govern WSNs 
-development: \emph{resource minimization} and \emph{bug prevention}, as defined 
-by Levis~\cite{wsn.decade}.
-That said, the support for hierarchical compositions, together with a 
-convenient syntax for timers and internal communication also lead to more 
-compact programs (up to 70\% reduction, in our evaluation).
-
-TODO
-
-SAFETY, both react to time, what if they access memory, who executes first
-CEU detects at compile time and raises a warning
-
-Node-system-imperative
-    - not macro
-    - not declarative
-    - drivers, protocols, control-intensive apps
-
-Synchronous
-    - not preemptive, actors
-
-ED->MT->HC
-
-Safety and expressiveness co-design
-
-abstractions need to be first class
-\end{comment}
+%
+That said, we re-implemented in \CEU the \emph{CC2420} radio driver, and the 
+\emph{DRIP}, \emph{SRP}, and \emph{CTP} network protocols~\cite{wsn.teps}.
+% (all originally implemented in \emph{nesC}~\cite{wsn.teps}).
+Our evaluation shows that the expressiveness of \CEU is not only sufficient for 
+the context of WSNs, but actually reduced the code complexity in 25\%, with an 
+increase in ROM and RAM consumption below 10\% in comparison to 
+\emph{nesC}~\cite{wsn.nesc}.
+%The radio driver also shows a responsiveness equivalent to \emph{nesC} in most 
+%scenarios.
 
 The rest of the paper is organized as follows:
 Section~\ref{sec.overview} gives an overview of how different programming 
 models used in WSNs can express typical control patterns.
-Section~\ref{sec.ceu} details the design of \CEU by motivating and discussing 
-safety aspects for each relevant language feature.
-In Section~\ref{sec.eval}, we describe how we ported to \CEU some open 
-standards of system-level protocols~\cite{wsn.teps},
-% (e.g. network protocols and a radio driver),
-% (the \emph{CC2420} radio driver, the \emph{trickle} timer, and the 
-%\emph{DRIP}, \emph{SRP}, and \emph{CTP} protocols)
-comparing some quantitative aspects with \emph{nesC} (e.g. memory usage and 
-tokens count).% backed by a thoughtful discussion.
-Section~\ref{sec.related} presents a XXX of related works to \CEU.
+Section~\ref{sec.ceu} details the design of \CEU, motivating and discussing the
+safety aspects of each relevant language feature.
+Section~\ref{sec.eval}, evaluates the implementation of the network protocols 
+in \CEU and compares some aspects with \emph{nesC} (e.g. memory usage and 
+tokens count).
+We also evaluate the responsiveness of the radio driver written in \CEU.
+Section~\ref{sec.related} discusses related work to \CEU.
 Section~\ref{sec.conclusion} concludes the paper and makes final remarks.
 
 \section{Overview of programming models}
@@ -433,11 +419,6 @@ As an example, an application that alternates between sampling a sensor and
 broadcasting its readings has a clear sequential pattern (with an enclosing 
 loop); while including an 1-minute timeout to interrupt the activity consists 
 of a parallel pattern.
-
-% TODO
-%An effective language for WSNs should provide control abstractions that can 
-%better express program specifications, desirably ensuring that the high degree 
-%of concurrency does not impose safety threats.
 
 Figure~\ref{lst.all} exposes the different programming models used in WSNs, 
 showing three implementations for an application that continuously lights on a 
@@ -626,7 +607,8 @@ turns off the LED.
 %
 This reasoning is reproducible in practice, and the LED will light on exactly 
 21 times for every execution of this program.
-First-class timers are discussed in more depth in Section~\ref{sec.ceu.time}.
+First-class timers are discussed in more depth in 
+Section~\ref{sec.ceu.wclocks}.
 %
 Note that this static inference cannot be easily extracted from the other 
 implementations of Figure~\ref{lst.all}, specially considering the presence of 
@@ -862,9 +844,9 @@ runtime and, hence, eliminates all false positives.
 However, the algorithm is exponential and may be impractical in some 
 situations.
 %
-That said, we run the simpler static analysis for all ports presented in 
-Section~\ref{sec.eval} (in negligible time) and no false positives were 
-detected, suggesting that the algorithm is practical.
+That said, the simpler static analysis executes in negligible time for all 
+implementations to be presented in Section~\ref{sec.eval} and does not detect 
+any false positives, suggesting that the algorithm is practical.
 
 \subsection{Integration with $C$}
 \label{sec.ceu.c}
@@ -975,7 +957,38 @@ assumed to be instantaneous, but never for control purposes.
 % (e.g. interrupt handling).
 
 \subsection{Local scopes and finalization}
-\label{sec.ceu.local}
+\label{sec.ceu.fins}
+
+\begin{figure}[t]
+%\rule{8.5cm}{0.37pt}
+{\small
+\begin{verbatim}
+ 1:  <...>
+ 2:  par/or do
+ 3:      <...>           // stop the protocol or radio
+ 4:  with
+ 5:      <...>           // neighbour request
+ 6:  with
+ 7:      loop do
+ 8:          par/or do
+ 9:              <...>   // resend request
+10:          with
+11:              await (dt) ms;  // beacon timer expired
+12:              var _message_t msg;
+13:              payload = _AMSend_getPayload(&msg, ...);
+14:              <prepare the message>
+15:              _AMSend_send(..., &msg, ...);
+16:              await CTP_ROUTE_RADIO_SENDDONE;
+17:          end
+18:      end
+19:  end
+\end{verbatim}
+}
+\rule{8.5cm}{0.37pt}
+\caption{ Unsafe use of local references.
+\label{lst.local}
+}
+\end{figure}
 
 Local declarations for variables bring definitions closer to their use in 
 programs, increasing the readability and containment of code.
@@ -1048,39 +1061,78 @@ out of scope.
 This way, regardless of how the sending loop is killed, the finalization code 
 politely requests the OS to cancel the ongoing send operation.
 
-\begin{figure}[t]
-%\rule{8.5cm}{0.37pt}
+\begin{comment}
+% TODO: expand
+During the porting process, we identified two potentially harmful system calls 
+that require
+
+The send/cancel pattern occurs in all ported applications that use the radio 
+for communication evaluated in Section~\ref{sec.eval}.
+
+ that  two dangerous
+
+given that the porting process was straghtforward, we believe that the 
+\emph{nesC} implementation is free of such ...
+However, .
+performance degradation
+another endorsement
+
+- exception srp queue
+we know exactly the place where it occurs
+nesC no
+
+* cancel
+* timers
+* locals
+
+%TODO: LOCALS AND PAR COMPOSITIONS ARE A PERFECT MATCH
+
+As a final consideration, we propose to extend the idea of compositions by 
+combining different \emph{applications} together.
+In the context of WSNs, it is usually difficult to physically recover motes in 
+a deployed network, and by combining multiple applications in a single image, 
+we can switch their execution remotely via radio.
+The following archetype illustrates this idea:
+
 {\small
 \begin{verbatim}
- 1:  <...>
- 2:  par/or do
- 3:      <...>           // stop the protocol or radio
- 4:  with
- 5:      <...>           // neighbour request
- 6:  with
- 7:      loop do
- 8:          par/or do
- 9:              <...>   // resend request
-10:          with
-11:              await (dt) ms;  // beacon timer expired
-12:              var _message_t msg;
-13:              payload = _AMSend_getPayload(&msg, ...);
-14:              <prepare the message>
-15:              _AMSend_send(..., &msg, ...);
-16:              await CTP_ROUTE_RADIO_SENDDONE;
-17:          end
-18:      end
-19:  end
+     1:   input int SWITCH;
+     2:   var int app = 1;
+     3:   loop do
+     4:      par/or do
+     5:         app = await SWITCH;
+     6:      with
+     7:         if app == 1 then
+     8:            <CODE for APP1>
+     9:         else/if app == 2 then
+    10:            <CODE for APP2>
+    11:         end
+    12:         await FOREVER;
+    13:      end
+    14:   end
 \end{verbatim}
 }
-\rule{8.5cm}{0.37pt}
-\caption{ Unsafe use of local references.
-\label{lst.local}
-}
-\end{figure}
+
+The input event \code{SWITCH} (line 1) is used to request application switches 
+remotely.%
+\footnote{ We are assuming the existence of an hypothetical high-level event 
+\code{Switch} that abstracts the radio protocol for requests to change the 
+current running application. }
+Initially, the code behaves as application $1$ (lines 7-9), but is also waiting 
+for a \code{Switch} request in parallel (line 5).
+Whenever a new request occurs, the \code{par/or} terminates, kills the running 
+application, and restarts as the requested application.
+The \code{await Forever} statement (line 13) ensures that a terminating 
+application does not restart itself.
+
+The same idea can be used to \emph{reboot} a mote remotely, in the case of a 
+strange behavior in an application.
+\end{comment}
 
 \subsection{Wall-clock time}
-\label{sec.ceu.time}
+\label{sec.ceu.wclocks}
+
+% TODO: ana
 
 Activities that involve reactions to \emph{wall-clock time}%
 \footnote{
@@ -1165,6 +1217,41 @@ reasoning about the execution behavior more difficult.
 \subsection{Internal events}
 \label{sec.ceu.ints}
 
+\begin{figure}[t]
+%\rule{8.5cm}{0.37pt}
+{\small
+\begin{verbatim}
+event int send;
+par do
+    <...>
+        await DRIP_KEY;
+        emit send=0;        // broadcast data
+with
+    <...>
+        await DRIP_TRICKLE;
+        emit send=1;        // broadcast meta
+with
+    <...>
+        var _message_t* msg = await DRIP_DATA_RECEIVE;
+        <...>
+        emit send=0;        // broadcast data
+with
+    loop do
+        var int isMeta = await send;
+        <...>   // send data or metadata
+    end
+end
+\end{verbatim}
+}
+\rule{8.5cm}{0.37pt}
+\caption{ The \code{send} ``subroutine'' is invoked from different parts of the 
+program.
+\label{lst.func}
+}
+\end{figure}
+
+% TODO: ana
+
 \CEU provides internal events as a signaling mechanism among trails in 
 parallel:
 a trail that invokes \code{await~e} can be awaken in the future by a trail that 
@@ -1203,39 +1290,6 @@ the \code{await} and will have no effect (just like the \emph{nesC}
 implementation, which uses a explicit state variable to achieve this behavior).
 
 % TODO: missed sends / non reentrancy
-
-\begin{figure}[t]
-%\rule{8.5cm}{0.37pt}
-{\small
-\begin{verbatim}
-event int send;
-par do
-    <...>
-        await DRIP_KEY;
-        emit send=0;        // broadcast data
-with
-    <...>
-        await DRIP_TRICKLE;
-        emit send=1;        // broadcast meta
-with
-    <...>
-        var _message_t* msg = await DRIP_DATA_RECEIVE;
-        <...>
-        emit send=0;        // broadcast data
-with
-    loop do
-        var int isMeta = await send;
-        <...>   // send data or metadata
-    end
-end
-\end{verbatim}
-}
-\rule{8.5cm}{0.37pt}
-\caption{ The \code{send} ``subroutine'' is invoked from different parts of the 
-program.
-\label{lst.func}
-}
-\end{figure}
 
 Internal events also provide means for describing more elaborate control 
 structures, such as \emph{exceptions}.
@@ -1283,267 +1337,9 @@ restarts to await the next packet.
 }
 \end{figure}
 
-\subsection{Code reentrancy}
-\label{sec.ceu.oo}
-
-Applications frequently require multiple instances of an abstraction to coexist 
-during runtime.
-As an example, to keep track of multiple dissemination values, an application 
-may create multiple instances of the DRIP protocol which, in turn, each 
-requires a local instance of a trickle timer.
-
-Code reentrancy is a technique to avoid duplicating code to save ROM:
-the same code is shared among instances, which only differ on their data and
-point of execution.
-
-In traditional multi-threaded systems, code reentrancy is achieved with 
-function declarations that are executed with different stacks and instruction 
-pointers.
-In object oriented languages, a \emph{class} encapsulates methods and 
-properties, and can be instantiated as objects.
-
-In \CEU, we designed an hybrid approach, which combines threads and classes in 
-the so called \emph{organisms}.
-An organism class is composed of an \emph{interface} and a single \emph{body}.
-The interface exposes public variables and internal events that other organisms 
-(and the top-level body) can refer.
-The body of a class is equivalent to a trail, having access to all presented 
-functionality provided by \CEU, such as parallel compositions, $C$ calls, 
-timers, etc.
-An organism is instantiated by declaring a variable of the desired class, and 
-its body is automatically spawned in a \code{par/or} with the enclosing block.
-A method can be simulated by exposing an internal event in the interface of the 
-class and using the same technique of Figure~\ref{lst.func}.
-
-The first column of Figure~\ref{lst.orgs} re-implements the example of 
-Figure~\ref{lst.all} to blink two LEDs with different frequencies.
-The \code{Blink} class exposes the \code{led} and \code{freq} variables to be 
-configured by the application, which then creates two instances and initializes 
-them.
-
-The second column shows how the organisms bodies are expanded to run in a 
-\code{par/or} together with the enclosing block body.
-The expansion is illustrative, i.e., the code is not duplicated.
-Note that in the expansion, the bodies of the organisms are followed by 
-\code{await~FOREVER}%
-\footnote{\code{FOREVER} is a reserved keyword in \CEU, and represents an 
-external input event that never occurs.}%
-, meaning that only the enclosing block can terminate the \code{par/or}.
-Note also that the block body runs first and properly initializes the organisms 
-before they are spawned.
-
-Once the enclosing block terminates, declared organisms are killed and all 
-memory can be reused, just as happens in standard parallel compositions.
-The allocation and deallocation of organisms is static, with no runtime 
-overhead such as garbage collection.
-
-\begin{figure}[t]
-%\rule{8.5cm}{0.37pt}
-\begin{minipage}[t]{0.45\linewidth}
-{\small
-\begin{verbatim}
-C _on(), _off();
-
-class Blink with
-   var int led;
-   var int freq;
-do
-   loop do
-      _on(this.led);
-      await (this.freq)s;
-      _off(this.led);
-      await (this.freq/2)s;
-   end
-end
-
-var Blink b1;
-b1.led  = 0;
-b1.freq = 2;
-
-var Blink b2;
-b2.led  = 1;
-b2.freq = 4;
-
-await 1min;
-\end{verbatim}
-}
-\end{minipage}
-%
-\hspace{0.0cm}
-%
-\begin{minipage}[t]{0.45\linewidth}
-%\fbox{
-{\small
-\begin{verbatim}
-C _on(), _off();
-var Blink b1, b2;
-par/or do
-   b1.led  = 0;
-   b1.freq = 2;
-   b2.led  = 1;
-   b2.freq = 4;
-   await 1min;
-with
-   loop do
-      _on(b1.led);
-      await (b1.freq)s;
-      _off(b1.led);
-      await (b1.freq/2)s;
-   end
-   await FOREVER;
-with
-   loop do
-      _on(b2.led);
-      await (b2.freq)s;
-      _off(b2.led);
-      await (b2.freq/2)s;
-   end
-   await FOREVER;
-end
-\end{verbatim}
-%}
-}
-\end{minipage}
-\rule{8.5cm}{0.37pt}
-\caption{ ``Two blinking LEDs'' using organisms.
-\label{lst.orgs}
-}
-\end{figure}
-
-Figure~\ref{lst.srp} shows part of our port of the SRP routing 
-protocol~\cite{wsn.teps} to \CEU.
-The protocol specifies a fixed number of \emph{forwarders} responsible for 
-routing received messages to neighbours based on a static table.
-Given that a forwarder holds internal state (i.e. a message buffer and the 
-forwarding activity), we define a \code{Forwarder} class and create multiple 
-instances to serve requests.
-
-The first column of Figure~\ref{lst.srp} shows the receiving loop of the 
-protocol, which invokes \code{emit~go} when a message needs to be forwarded.
-The event is declared as global, so that \code{Forwarder} instances have access 
-to it.
-The forwarders are declared in a vector, creating \code{COUNT} different 
-instances.
-As the vector is local, all instances are automatically killed when the 
-protocol is stopped.
-(Note the use of the start/stop pattern of Figure~\ref{lst.radio} again.)
-
-The second column of Figure~\ref{lst.srp} shows the \code{Forwarder} class.
-Initially, all forwarders are in the same state, waiting for the global event 
-\code{go}.
-Once the receiving loop emits the event in the top-level body, the forwarders 
-awake in the order they were declared.
-The first forwarder atomically sets the \code{gotcha} variable, indicating that 
-the message will be handled and that other forwarders should ignore it:
-all other forwarders will await again for the next \code{go} emission.
-With this technique, we eliminated the need of an explicit queue.
-In the case that all forwarders become busy, the \code{go} emission will be 
-missed (with \code{gotcha=0}), acting just like a full queue.
-
-\begin{comment}
-Note that \CEU organisms are not global entities and do not use the heap for 
-memory.
-Instead, they are bounded to the scope they are declared, and all memory is 
-statically allocated, just like \CEU does for standard local variables.
-Also, when an organism goes out of scope, the same automatic bookkeeping of 
-\code{par/or} compositions holds, all internal trails are killed and 
-finalization blocks execute (if any).
-Hence, the ``garbage collection'' for both the memory and code in organisms is 
-efficient and static.
-Although \CEU does not support dynamic creation (which could lead do unbounded 
-memory), scoped organisms offer some degree of flexibility when compared to 
-systems providing global objects only~\cite{wsn.virgil,wsn.flowtalk}.
-\end{comment}
-
-% TODO: ND access
-
-\begin{figure}[t]
-%\rule{8.5cm}{0.37pt}
-\begin{minipage}[t]{0.45\linewidth}
-{\small
-\begin{verbatim}
-event _fwd_t go;
-loop do
-  await SRP_START;
-  par/or do
-    await SRP_STOP;
-  with
-    var Forwarder[COUNT] fwds;
-    <initialize fwds>
-    loop do
-      await SRP_RECEIVE;
-      <receive or forward>
-      if hops_left > 0 then
-        <prepare fwd>
-        emit go=&fwd;
-      end
-    end
-  end
-end
-\end{verbatim}
-}
-\end{minipage}
-%
-\hspace{0.0cm}
-%
-\begin{minipage}[t]{0.45\linewidth}
-%\fbox{
-{\small
-\begin{verbatim}
-class Forwarder with
-  <...>
-do
-  loop do
-    fwd = await global:go;
-    if fwd:gotcha then
-      continue;
-    end
-    fwd:gotcha = 1;
-    <send message>
-    <...>
-  end
-end
-\end{verbatim}
-%}
-}
-\end{minipage}
-\rule{8.5cm}{0.37pt}
-\caption{ SRP forwarders as organisms.
-\label{lst.srp}
-}
-\end{figure}
-
-\begin{comment}
-Objects
-    - each method is a global function receiving a different object to 
-      manipulate
-    - global (usually heap)
-    - garbage collected or global
-
-Organisms
-    - mutual reactivity
-    - scoped / local
-    - O(1) GC
-
-- nesting
-    - data
-    - events
-    - listeners
-    - compositions
-
-- both have an interface
-- fields / methods
-
-- fields / internal events
-- public fields are ok because reliable shared memory
-
-- no recursive definitions
-- but we have interfaces
-- special global interface
-\end{comment}
-
+% TODO
 %\subsection{Limitations}
-\subsection{Implementation}
+%\subsection{Implementation}
 
 %\newpage
 \section{Evaluation}
@@ -1557,114 +1353,144 @@ Organisms
 \end{figure*}
 
 In order to evaluate the applicability of \CEU in the context of WSNs, we 
-ported a number of pre-existing protocols and system utilities in the TinyOS 
-operating system~\cite{wsn.tos}, which are all written in 
-\emph{nesC}~\cite{wsn.nesc}.
-We chose \emph{nesC} in our evaluation given the availability and maturity of 
-open-source implementations, and because it is also used as the base of 
-comparison in many related works to \CEU 
-(\cite{wsn.protothreads,wsn.sol,wsn.ocram,wsn.flowtalk}).
+re-implemented a number of protocols and system utilities originally written in 
+\emph{nesC}~\cite{wsn.nesc} from the TinyOS operating system~\cite{wsn.tos}.
+%
+We chose \emph{nesC} in our evaluation given its resource efficiency, code base 
+maturity, and because it is used as benchmark in many related works to \CEU 
+(e.g.  \cite{wsn.protothreads,wsn.sol,wsn.ocram,wsn.flowtalk}).
 
-We ported the following applications to \CEU%
-\footnote{The source code for both \CEU and \emph{nesC} can be found at
-\url{github.com/xxx/}.}:
-the \emph{Trickle} timer~\cite{wsn.trickle};
-the receiving component of the \emph{CC2420} radio driver~\cite{wsn.teps};
-the \emph{DRIP} dissemination protocol~\cite{wsn.teps};
-the \emph{SRP} routing protocol~\cite{wsn.teps};
-the routing component of the \emph{CTP} collection protocol~\cite{wsn.ctp}.
+% TODO: our git
+
+Our evaluation consists of the following implementations:
+the \emph{Trickle} timer;
+the receiving component of the \emph{CC2420} radio driver;
+the \emph{DRIP} dissemination protocol;
+the \emph{SRP} routing protocol;
+and the routing component of the \emph{CTP} collection protocol.
+%
+They represent well the realm of system-level development for WSNs, which 
+mostly consists of network protocols and lower level utilities to be used as 
+services in applications.
+They are also intensive in control and concurrency aspects, being perfect 
+targets to \CEU.
+Finally, they are open standards~\cite{wsn.teps}, with open implementations%
+\footnoteremember{tos}
+    {TinyOS repository: \url{github.com/tinyos/tinyos-release}},
+and are academically recognized~\cite{wsn.trickle,wsn.ctp}.
+
+% TODO
+% \footnote{The source code for both \CEU and \emph{nesC} can be found at
+% \url{github.com/xxx/}.}:
 
 We took advantage of the component-based model of TinyOS and all of our ports 
 use the same interface provided by the \emph{nesC} counterpart---
-changing from one implementation to the other is done by changing a single 
+changing from one implementation to the other is done by swapping a single 
 file.
-This way, we could also use existing test applications available in the TinyOS 
-repository (e.g. \emph{TestDissemination}, \emph{TestNetwork}, etc.).
-Furthermore, retaining the same architecture made easier to mimic the 
-functionality between the implementations.
+This way, we could use existing test applications available in the TinyOS 
+repository (e.g. \emph{RadioCountToLeds} and 
+\emph{TestNetwork}~\footnoterecall{tos}).
+%we could retain the same architecture between the implementations, making 
+%easier to mimic \emph{nesC}'s functionality.
 
-Figure~\ref{fig.eval} shows the comparison of \emph{resource usage} and 
-\emph{code complexity}, which are discussed in detail in
+Figure~\ref{fig.eval} shows the comparison for \emph{resource usage} and 
+\emph{code complexity} between \emph{nesC} and \CEU, which are discussed in
 Sections~\ref{sec.eval.resource}~and~\ref{sec.eval.code}, respectively.
-We also detail which features of \CEU have been used in the ports, for a more 
-qualitative discussion.
-Note that all proposed features appear in at least two of the ported 
-applications.
+The figure also details how many times each relevant feature of \CEU was used 
+in the implementations (i.e., local variables, internal events, first-class 
+timers, parallel compositions, and maximum number of concurrent trails).
 
-\begin{comment}
-TODO
+We also evaluate the performance of \CEU with respect to responsiveness, i.e., 
+its capacity to promptly acknowledge requests from the environment, such as 
+radio packets arrivals.
+Section~\ref{sec.eval.radio} presents two experiments that measure the 
+responsiveness of the implemented radio driver under high loads.
 
-However, without architectural changes, we could not express XXX how.
-more lines, more ROM
-    - not always represent the Céu way
-        - full DRIP 40%
-
-and is used  works (e.g. \cite{wsn.protothreads,wsn.sol,wsn.flask}) already 
-        include comparisons to nesc, allowing (at least) an indirect comparison 
-of \CEU{} with them.
-
-\footnote {
-    We used $TinyOS-2.1.1$ and $micaz$ motes, and the sample applications found 
-in \code{/opt/tinyos-2.1.1/apps/}.
-}
-\end{comment}
-
-\subsection{Resource usage}
+\subsection{Memory usage}
 \label{sec.eval.resource}
 
-% TODO: testnetwork, somente CTP(!)
+Memory is a scarce resource in WSNs motes and it is important that \CEU does 
+not pose significant overheads in comparison to \emph{nesC}.
+%
+We evaluate ROM and RAM consumption by using the simplest available test 
+applications for the ported implementation.
+We tweaked each application to remove extra functionality so that the generated 
+binary is dominated by the component of interest.
+Them, we compiled each application twice: one with the original component in 
+\emph{nesC}, and another with the ported component in \CEU.
+%
+Figure~\ref{sec.eval} shows in the column \emph{Memory usage} the consumption 
+of ROM and RAM for the generated applications.
+With the exception of the Trickle timer, the results in \CEU remains below 10\% 
+in ROM and 5\% in RAM in comparison with the implementations in \emph{nesC}.
+%
+Our method and results are similar to those for
+Protothreads~\cite{wsn.protothreads}, which is used extensively in Contiki, and 
+has a simple and lightweight implementation based on a set of C macros.
 
-% important bla bla bla
-% results indicate a good design, features "se encaixam", no bloat
+The Trickle timer illustrates the footprint of the runtime of \CEU.
+The RAM overhead of 20\% actually corresponds to only 16 bytes: 1 byte for each 
+of the maximum 6 concurrent trails, and 10 bytes to handle synchronization 
+among timers.
+%
+As the complexity of the application grows, this overhead tends to discharge.
+%
+The SRP implementation could eliminate a queue by signaling events internally, 
+hence the decrease in RAM.
+%
+Note that both TinyOS and \CEU define functions to manipulate queues for tasks 
+(or trails) and timers.
+Hence, given that our implementations mix components in the two systems, we pay 
+a considerable overhead in ROM.
 
-% limitation
-% hard real-time
-% theoretical limitation?
-% radio throughput is the critical in WSNs
-% packet losses involve retransmissions which are expensive
-
-%We conclude that local scopes are currently more important as a programming 
-%XXX than to actually a mechanism to reuse memory.
-%we checked, all in parallel
-%Similar results from evaluations in related work~\cite{wsn.ocram,wsn.sol}
-
-% nesC uses less RAM than \emph{all}.
-% two apps in sequence
+We focused most of our implementation efforts on RAM optimization, as it has 
+been historically considered more scarce then ROM~\cite{wsn.decade}.
+Although, we have achieved competitive results, we expected more gains with 
+memory reuse for blocks in sequence, because it is something that cannot be 
+done automatically by the \emph{nesC} compiler.
+However, we carefully analyzed each ported application and it turned out that 
+we had no gains \emph{at all} from blocks in sequence.
+Our conclusion is that sequential patterns in WSNs applications either come 
+from split-phase operations, which always require to preserve memory;
+or from loops, which do reuse all memory, but in the same way event-driven 
+systems do.
 
 \subsection{Code complexity}
 \label{sec.eval.code}
 
-To measure the code complexity between the implementations in \CEU and 
-\emph{nesC}, we used the number of tokens present in the source code as the 
-main metric.
-We chose to use tokens instead of lines of code because the code density is 
-considerably lower in \CEU, given that most lines are composed of a single 
-block delimiter from a structural composition.
-Note that the languages share the core syntax for expressions, calls, and field 
-accessors (based on $C$), and we removed all verbose annotations from the 
-\emph{nesC} implementations, which are not present in \CEU (e.g. \code{signal}, 
-\code{call}, \code{command}, etc.) for a fair comparison.
-
+We used two metrics to compare code complexity between the implementations in 
+\CEU and \emph{nesC}: the number of tokens and the number of global variables 
+used in the source code.
+%
 Similarly to comparisons from related works~\cite{wsn.ocram,wsn.protothreads}, 
 we did not consider code shared among the implementations, as they do not 
 represent control functionality and pose no challenges regarding concurrency 
-aspects (e.g. predicates, packet accessors, etc.).
+aspects (i.e. they are predicates, \code{struct} accessors, etc.).
 
+We chose to use tokens instead of lines of code because the code density is 
+considerably lower in \CEU, given that most lines are composed of a single 
+block delimiter from a structural composition.
+%
+Note that the languages share the core syntax for expressions, calls, and field 
+accessors (based on $C$), and we removed all verbose annotations from the 
+\emph{nesC} implementations (e.g. \code{signal}, \code{call}, \code{command}, 
+etc.) for a fair comparison.
+%
 Figure~\ref{fig.eval} shows a considerable decrease in the number of tokens for 
-all ported applications (from 20\% up to 70\%).
+all implementations (from 20\% up to 70\%).
+% TODO: 20% ainda?
 
-As a second metric, we counted the number of global variables used in the 
-implementations.
-The globals were categorized in \emph{state} and \emph{data} variables.
-
+Globals were categorized in \emph{state} and \emph{data} variables.
+%
 State variables are used as a mechanism to control the application flow (on the 
 lack of a better primitive).
 Keeping track of them is regarded as a difficult task, hence, reduction of 
 state variables has already been proposed as a metric of code complexity in a 
 related work~\cite{wsn.protothreads}.
-In \CEU implementations, state variables were reduced to zero, as all control 
-patterns could be expressed with hierarchical compositions of activities.
-
+The implementations in \CEU completely eliminated state variables, and all 
+control patterns could be expressed with hierarchical compositions of 
+activities.
+%
 Data variables in WSNs are usually used to hold message buffers and protocol 
 parameters (e.g. sequence numbers, timer intervals, etc.).
 In event-driven systems, given that stacks are not retained across reactions to 
@@ -1675,125 +1501,356 @@ to all functions inside the component).}.
 Although the use of local variables does not incur in reduction of lines of 
 code (or tokens), we believe that the smallest the scope of a variable, the 
 more readable and less susceptible to bugs the program becomes.
-
-In \CEU implementations, most variables could be nested to a deeper scope.
+%
+In the \CEU implementations, most variables could be nested to a deeper scope.
 The column \emph{locals} in Figure~\ref{fig.eval} shows the depth of each 
 global that became a local variable in \CEU (where depth=0 is a global 
 variable).
 
-The columns below \emph{C\'eu features} in Figure~\ref{fig.eval} point how many 
-times each functionality has been used in the ports, helping on identifying 
-where the reduction in complexity comes from.
-As an example, the \emph{Trickle} timer is abstracted as a class that uses 2 
-timers and 3 parallel compositions, with at most 6 trails active at the same 
-time (a \code{par} may spawn more than 2 trails).
+The columns below \emph{C\'eu features} in Figure~\ref{fig.eval} point out how 
+many times each functionality has been used in the ports, helping on 
+identifying where the reduction in complexity comes from.
+%
+As an example, the Trickle timer uses 2 timers and 3 parallel compositions, 
+resulting in at most 6 trails active at the same time (a \code{par} may spawn 
+more than 2 trails).
+Six trails for such a small application is justified by its highly 
+control-intensive nature, and the almost 70\% code reduction illustrates the 
+huge gains with \CEU in this context.
+%
+%TODO: CTP c/ select
 
 % TODO: DRIP uses trickle as a service (does not implement it)
 
-\subsection{Safety}
+\subsection{Responsiveness}
+\label{sec.eval.radio}
 
-The send/cancel pattern occurs in all ported applications that use the radio 
-for communication evaluated in Section~\ref{sec.eval}.
-% TODO: expand
+A known limitation of languages with synchronous and cooperative execution is 
+that they cannot meet hard real-time 
+deadlines~\cite{wsn.comparison,wsn.tosthreads}.
+For instance, the rigorous synchronous semantics of \CEU forbids 
+non-deterministic preemption to serve high priority trails.
+%
+This way, the implementation of a radio driver purely in \CEU raises questions
+regarding its responsiveness and we conducted two experiments in order two 
+evaluate it.
+%
+Even though WSNs protocols are usually tolerant to faults (given the unreliable 
+link), packet losses affect the network performance and cause motes to spend 
+more battery.
 
-% reproducibility, does not depend on the platform
+In the first experiment%
+\footnote{The experiments use the \emph{COOJA} simulator~\cite{wsn.cooja} 
+running images compiled to \emph{TelosB} motes.},
+we performed a stress test on the radio driver to compare its performance in 
+the \CEU and \emph{nesC} implementations.
+We use 10 motes that broadcast 100 consecutive messages of 20 bytes to a mote 
+that runs a periodic time-consuming activity.
+The receiving handler simply adds the value of each received byte to a global 
+counter.
+% (we set a single random byte for each message, so that the sum is always 1).
+%
+The sending rate of each mote is 200ms (leading to an average of 50 messages 
+per second considering the 10 motes), and the activity in the receiving mote 
+runs every 140ms.
+We run the experiment varying the duration of the lengthy activity from 0 to 
+128 milliseconds.
+%
+We assume that the lengthy operation is implemented directly in C and cannot be 
+easily split in smaller operations (e.g. recursive 
+algorithms~\cite{wsn.comparison,wsn.tosthreads}).
+This way, we simulated it with a simple busy wait that will keep the driver in 
+\CEU unresponsive, which is our objective.
+%(given the run completion semantics of the language).
+%We certified that the operation executed the same number of times in \CEU and 
+%\emph{nesC} for all tests in the experiment.
 
+Figure~\ref{fig.radio1} shows the total number of handled messages in \CEU and 
+\emph{nesC} for each configuration.
+%
+Starting from operations that take 16ms, the performance of \CEU drops below 
+5\% in comparison to \emph{nesC}.
+%
+Our direct interpretation is that the \CEU driver starts to become unresponsive 
+when receiving messages every 20ms while executing a periodic operation of 
+16ms.
+The same interpretation can be done for \emph{nesC}, but considering a 64-ms 
+operation, which is a similar conclusion taken from TOSThreads experiments 
+(25-bytes messages every 50ms, while running a 50-ms 
+operation~\cite{wsn.tosthreads}).
+%
+Table~\ref{tab.durs} shows the durations for some lengthy operations found in 
+the literature specifically designed for WSNs.
+The operations in the group with timings below 8ms could be used with real-time 
+responsiveness with \CEU, considering the proposed configuration parameters.
+%a 5\% decrease in performance in comparison with \emph{nesC}.
 
-* static analysis
+\begin{figure}[t]
+\includegraphics{radio1}
+\caption{ Packet receives under high-loads for \CEU and \emph{nesC}.
+\label{fig.radio1}
+}
+\end{figure}
 
-given that the porting process was straghtforward, we believe that the 
-\emph{nesC} implementation is free of such ...
-However, .
-another endorsement
+\begin{table}[t]
+\begin{center}
+\begin{tabular}{ | l | r | }
+\hline
+    Operation          & Duration  \\ \hline
+\hline
+    Block cypher~\cite{wsn.tinysec,wsn.crypto}  & 1ms           \\ \hline
+    MD5 hash~\cite{wsn.crypto}                  & 3ms           \\ \hline
+    Wavelet decomposition~\cite{wsn.wavelet}    & 6ms           \\ \hline
+    SHA-1 hash~\cite{wsn.crypto}                & 8ms           \\ \hline
+\hline
+    RLE compression~\cite{wsn.compression}      & 70ms          \\ \hline
+    BWT compression~\cite{wsn.compression}      & 300ms         \\ \hline
+    Image processing~\cite{wsn.cyclops}         & 50--1000ms    \\ \hline
+\end{tabular}
+\caption{Durations for lengthy operations is WSNs.}
+\label{tab.durs}
+\end{center}
+\end{table}
 
-- exception srp queue
-we know exactly the place where it occurs
-nesC no
+\begin{figure}[t]
+\includegraphics{radio2.png}
+\caption{ Packet receives under high-loads for \CEU and \emph{nesC}.
+\label{fig.radio2}
+}
+\end{figure}
 
-* cancel
+Although we did not perform specific tests to evaluate CPU usage, the first 
+experiment suggests that the overhead of \CEU over \emph{nesC} is lower than 
+3\%, based on the packet losses for the CPU awake full time.
+For lengthy operations implemented in C, there is no overhead, as the generated 
+code is the same for \CEU and \emph{nesC}.
 
-* timers
+In the second experiment, instead of running an activity in parallel, we use a 
+8-ms operation in sequence with message arrivals to simulate a process that is 
+tied with message handling, such as encrypting and forwarding.
+We now run the experiment varying the rate in the 10 sending motes from 600ms 
+to 100ms.
+%
+Figure~\ref{fig.radio2} shows the total number of handled messages in \CEU and 
+\emph{nesC} for each configuration.
+%
+The last column shows the theoretical limit of 80ms, i.e., receiving a message 
+every 8ms and handling it in 8ms.
+%
+The results show that \CEU performs equally to \emph{nesC} for a frequency up 
+to 50 messages per second.
 
-* locals
+% TODO: reaction times, measure or cite?
 
-- automatically
-    - timer, loops, recursion
-    - C is easily trackable
-- manually
-    - shared memory
-    - calls
-    - abortion
-    - finalization
+The overall conclusion is that \CEU can be used to write system-level drivers 
+if other parts of the application (also in \CEU) do not execute 
+algorithmic-intensive operations.
+%
+\CEU performs equally in comparison to \emph{nesC} for sub-millisecond 
+reactions.
+%
+The range between 1ms and 8ms is a ``gray area'' that offers opportunities for 
+simple lengthy operations, but that also requires careful analysis and testing.
+%
+For operations over 8ms and under high loads, \CEU will perform considerably 
+worse than \emph{nesC}.
 
-%\subsection{Discussion}
+\subsection{Discussion}
 
-%- motivations and qualitative analysis for features on Sec-3
+\CEU targets control-intensive applications and provides abstractions that can 
+better express program flow specifications.
+%
+Our evaluation shows a considerable decrease in complexity that comes from 
+logical compositions of trails through \code{par/or} and \code{par/and} 
+constructs.
+%
+They handle startup and termination for trails seamlessly without extra 
+programming efforts.
+%
+The small overhead in memory qualifies \CEU as a realistic option for 
+constrained devices.
+
+% TODO
+%with overheads below 5\% and 10\%
+%Some overhead in memory exists, but RAM is minimal and can be avoided XXX an 
+%trackable
+%inherent per-trail overhead.
+%
+%The overhead in ROM is below 10\% but has not .
+
+The main aspect of \CEU is to ensure that the high degree of concurrency in 
+WSNs does not pose safety threats to applications.
+Restricting the expressiveness of the language enabled a broad safety analysis 
+in programs at compile time.
+The analysis encompasses all proposed concurrency mechanisms, such as parallel 
+compositions, first-class timers, and communication via events.
+As summary, the following safety properties hold for all programs that 
+successfully compile in \CEU:
+
+\begin{itemize}
+\item Time-bounded reactions to the environment
+        (Sections~\ref{sec.ceu.det}~and~\ref{sec.ceu.ints}).
+\item Reliable weak and strong trail abortion
+        (Sections~\ref{sec.ceu.det}~and~\ref{sec.ceu.shared}).
+\item No concurrency in variable accesses
+        (Section~\ref{sec.ceu.shared}).
+\item No concurrency in system calls sharing a resource
+        (Section~\ref{sec.ceu.c}).
+\item Finalization for blocks going out of scope
+        (Section~\ref{sec.ceu.fins}).
+\item Auto-adjustment for timers in sequence
+        (Section~\ref{sec.ceu.wclocks}).
+\item Synchronization for timers in parallel
+        (Section~\ref{sec.ceu.wclocks}).
+\end{itemize}
+
+These properties are desirable in any application and are guaranteed as 
+preconditions in \CEU by design.
+Ensuring or even extracting these properties from unrestricted languages is not 
+possible without significant manual analysis.
+
+Even though the achieved expressiveness and overhead of \CEU meet the 
+requirements of WSNs, its design imposes two inherent limitations:
+the lack of dynamic primitives that would forbid the static analysis,
+and the lack of hard real-time guarantees.
+%
+Regarding the first limitation, dynamic features are already discouraged in the 
+context of WSNs due to resource constraints.
+For instance, even object-oriented languages targeting WSNs forbid dynamic 
+allocation~\cite{wsn.flowtalk,wsn.virgil}.
+
+To deal with the second limitation, which can be critical in the presence of 
+lengthy computations, we can consider the following approaches:
+(1) carefully measure reaction times to see if deadlines are met;
+(2) manually place \code{pause} statements in tight loops;
+(3) integrate \CEU with a preemptive system.
+%
+The second option requires rewriting the lengthy computation in \CEU with
+\code{pause} statements to let other trails to be scheduled.
+This option is the one recommended in many related works that provide a similar 
+primitive (e.g. \code{pause}~\cite{esterel.primer}, 
+\code{PT\_YIELD}~\cite{wsn.protothreads}, \code{yield}~\cite{wsn.sol}, 
+\code{post}~\cite{wsn.nesc}).
+%
+Fortunately, \CEU and preemptive threads are not mutually exclusive, and the 
+third option is appealing to be explored in a future work.
+For instance, TOSThreads~\cite{wsn.tosthreads} is integrated with \emph{nesC} 
+via message passing, a mechanism that is safe and matches the semantics of 
+external events in \CEU.
 
 \section{Related work}
 \label{sec.related}
 
 \begin{figure*}[t]
 \includegraphics[width=\textwidth]{related.png}
-\caption{ Table of features found in related works to \CEU.
+\caption{ Table of features found in related work to \CEU.
+(Gray background indicates where they first appeared.)
+TODO CEU
 \label{fig.related}
 }
 \end{figure*}
 
-Figure~\ref{fig.related} presents an overview of related works to \CEU, 
-pointing support for specific features XXX, which are discussed individually.
-Although Esterel~\cite{esterel.ieee91} is not targeted at WSNs, we included it 
-given its strong influence on \CEU and many related works.
-The second line, \emph{Preemptive}, represents all multi-threaded languages 
-with preemptive scheduling~\cite{wsn.mantisos,Y,Z}.
-The remaining lines enumerate languages with similar goals of \CEU that also 
-follow a synchronous or cooperative execution semantics (they are sorted by the 
-date they first appear in a publication).
+\CEU is strongly influenced by Esterel~\cite{esterel.ieee91} on its support for 
+compositions and reactivity to events.
+However, Esterel is focused on control and delegates to programmers most 
+efforts to deal with data and low-level access to the underlying platform.
+For instance, read/write to shared memory among threads is forbidden and 
+avoiding conflicts between concurrent $C$ calls is left to 
+programmers~\cite{esterel.primer}.
+\CEU deals with shared memory and $C$ integration at its very core, with 
+additional support for finalization, conflict annotations, and a static 
+analysis that permeates all languages aspects.
+This way, \CEU could not be designed easily as pure extensions to Esterel.
 
-The three columns under \emph{Composition} indicate which languages provide
-abstractions to deal with \emph{sequential} and \emph{parallel} compositions of 
-activities, as well as \emph{internal communication} among them.
-Esterel first introduced hierarchical compositions of processes, which first 
-appeared in the context of WSNs in Protothreads~\cite{wsn.protothreads} and 
-Sol~\cite{wsn.sol} (indicated by the gray background).
-\CEU differs from these on the stack-based semantics for internal events, which 
-is essential to bring other control mechanisms, such as exceptions, as 
-discussed in Section~\ref{sec.ceu.ints}.
+Figure~\ref{fig.related} presents an overview of related work to \CEU, pointing 
+out support for a number of features (grouped by those that reduce complexity 
+and those that increase safety).
+The line \emph{Preemptive} represents languages with preemptive 
+scheduling~\cite{wsn.mantisos,wsn.tosthreads}, which are summarized further.
+The remaining lines enumerate languages with similar goals of \CEU that follow 
+a synchronous or cooperative execution semantics (they are sorted by the date 
+they first appear in a publication).
 
-% TODO:
-%It is known that languages with preemptive scheduling cannot express thread 
-%termination safely~\cite{esterel.preemption,sync_async.threadsstop}, being 
-%unsuitable for a \code{par/or} construct.
-
-The two columns under \emph{Memory} list language support for \emph{code 
-reentrancy} and \emph{local scopes} for variables, which account for saving ROM 
-and RAM, respectively.
-Both properties are easily achieved in traditional multi-threaded systems, in 
-which threads share global functions as bodies, with each holding a different 
-stack.
-However, this approach is not resource-efficient, given that the compiler 
-cannot infer when each thread is active, enforcing all to be statically 
-allocated~\cite{wsn.mantisos,wsn.ocram} (even if some of them are never active 
-at the same time).
-\emph{nesC} provides compile-time instantiable components, which resemble 
-classes from object-oriented programming.
-As discussed in Section~\ref{sec.ceu.oo}, \CEU organisms introduce an hybrid 
-approach, providing TODO.
-\CEU support for local scopes is very similar to how OSM~\cite{wsn.osm} does.
-
+Many related works allow events to be handled in sequence through a blocking 
+primitive (column \emph{seq}), overcoming the main limitation of event-driven 
+systems~\cite{wsn.protothreads, wsn.ocram, wsn.tinythreads, wsn.flowtalk, 
+wsn.sol}.
+%
+Most of them also keep the state of local variables between reactions to the 
+environment (column \emph{locals}).
+\CEU introduces a reliable mechanism to interface local pointers with the 
+system through annotations or finalization blocks (column \emph{final}), as 
+discussed in Section~\ref{sec.ceu.fins}.
+%
 TODO
-Esterel derived cannot offer the analysis
+Regarding compile-time safety guarantees, many related works can provide 
+deterministic and reproducible execution relying on cooperative scheduling 
+(column \emph{det}).
+%
+However, as far as we know, \CEU is the first system to extend determinism for 
+timers in parallel (as discussed in Section~\ref{sec.ceu.wclocks}).
 
-TODO
-Although \CEU does not support dynamic creation (which could lead do unbounded 
-memory), scoped organisms offer some degree of flexibility when compared to 
-systems providing global objects only~\cite{wsn.virgil,wsn.flowtalk}.
+Synchronous languages first appeared in the context of WSNs through 
+OSM~\cite{wsn.osm} and Sol~\cite{wsn.sol}, which provide parallel compositions 
+(column \emph{par}) and distinguish from multi-threaded languages by handling 
+thread destruction seamlessly~\cite{sync_async.threadsstop,esterel.preemption}.
+Compositions are fundamental for the simpler reasoning about control that 
+enables the safety analysis of \CEU.
+%
+Sol detects infinite loops at compile time to ensure that programs are 
+responsive~\cite{wsn.sol} (column \emph{bounded}).
+\CEU adopts the same policy, which is based on Esterel.
+%
+Internal events (column \emph{int}) can be used as a reactive alternative to 
+shared-memory communication in synchronous languages.
+OSM supports a queue-based mechanism based on Esterel~\cite{wsn.osm}, but \CEU 
+introduces a stack-based execution that also provides a restricted but safer 
+form of subroutines (as discussed in Section~\ref{sec.ceu.ints}).
+
+\emph{nesC} provides a data-race detector for interrupt handlers (column 
+\emph{shared}):
+\emph{``if a variable x is accessed by asynchronous code, then any access of x 
+outside of an atomic statement is a compile-time error''}~\cite{wsn.nesc}.
+The analysis of \CEU is targeted at synchronous code and point more precisely 
+when accesses can be concurrent, what is only possible given its restricted 
+semantics.
+Furthermore, \CEU extends the analysis for system calls (\emph{commands} in 
+\emph{nesC}) and control conflicts (as discussed in Sections~\ref{sec.ceu.det} 
+and \ref{sec.ceu.c}).
+
+On the opposite side of concurrency models when compared to \CEU, languages 
+with preemptive scheduling assume time independence among processes and are 
+more appropriate for applications involving algorithmic-intensive 
+problems.
+%
+Preemptive scheduling is also employed in real-time operating systems to 
+provide response predictability, typically through prioritized schedulers
+~\cite{wsn.mantisos,wsn.oses,freertos,wsn.tosthreads}.
+%
+The choice between the two models should take into account the nature of the 
+application and is a trade-off between safe synchronization and predictable 
+responsiveness.
+
 \section{Conclusion}
 \label{sec.conclusion}
 
+%
+%We explore the precious control information that can be inferred from thread
+%compositions at compile time in order to embrace safety aspects to a greater 
+%extent.
 % most safety guarantees actually make the programming experience more 
 % expressive
 
 \begin{comment}
+Our overall contribution is a careful language design that considers these
+mechanisms together in a analysis that can detect safety threats at compile 
+time, such as concurrent accesses to shared memory, and concurrent termination 
+of timers and threads.
+%
+%We explore the precious control information that can be inferred from thread
+%compositions at compile time in order to embrace safety aspects to a greater 
+%extent.
+%
 CONCLUSION
 Note that one of the main objectives of \CEU is to enhance safety in concurrent 
 patterns, in the sense that if the programmer sticks to \CEU primitives for 
@@ -1826,17 +1883,9 @@ $A$:
 (\til{}A; \til{}A; \til{}A; v)*
 }
 
-\end{comment}
-
-\begin{comment}
 % BACKGROUND
 
 - hard vs soft real-time
-
-% MOTIVATION
-
-- Safety:
-    "
 
 % BENCHMARKS
 
@@ -2377,7 +2426,485 @@ simultaneous events would inhibit the temporal analysis of \CEU.
 For instance, variable manipulation in Esterel is restricted to a single 
 process (trail in \CEU).
 
+\subsection{Code reentrancy}
+\label{sec.ceu.oo}
+
+Applications frequently require multiple instances of an abstraction to coexist 
+during runtime.
+As an example, to keep track of multiple dissemination values, an application 
+may create multiple instances of the DRIP protocol which, in turn, each 
+requires a local instance of a trickle timer.
+
+Code reentrancy is a technique to avoid duplicating code to save ROM:
+the same code is shared among instances, which only differ on their data and
+point of execution.
+
+In traditional multi-threaded systems, code reentrancy is achieved with 
+function declarations that are executed with different stacks and instruction 
+pointers.
+In object oriented languages, a \emph{class} encapsulates methods and 
+properties, and can be instantiated as objects.
+
+In \CEU, we designed an hybrid approach, which combines threads and classes in 
+the so called \emph{organisms}.
+An organism class is composed of an \emph{interface} and a single \emph{body}.
+The interface exposes public variables and internal events that other organisms 
+(and the top-level body) can refer.
+The body of a class is equivalent to a trail, having access to all presented 
+functionality provided by \CEU, such as parallel compositions, $C$ calls, 
+timers, etc.
+An organism is instantiated by declaring a variable of the desired class, and 
+its body is automatically spawned in a \code{par/or} with the enclosing block.
+A method can be simulated by exposing an internal event in the interface of the 
+class and using the same technique of Figure~\ref{lst.func}.
+
+The first column of Figure~\ref{lst.orgs} re-implements the example of 
+Figure~\ref{lst.all} to blink two LEDs with different frequencies.
+The \code{Blink} class exposes the \code{led} and \code{freq} variables to be 
+configured by the application, which then creates two instances and initializes 
+them.
+
+The second column shows how the organisms bodies are expanded to run in a 
+\code{par/or} together with the enclosing block body.
+The expansion is illustrative, i.e., the code is not duplicated.
+Note that in the expansion, the bodies of the organisms are followed by 
+\code{await~FOREVER}%
+\footnote{\code{FOREVER} is a reserved keyword in \CEU, and represents an 
+external input event that never occurs.}%
+, meaning that only the enclosing block can terminate the \code{par/or}.
+Note also that the block body runs first and properly initializes the organisms 
+before they are spawned.
+
+Once the enclosing block terminates, declared organisms are killed and all 
+memory can be reused, just as happens in standard parallel compositions.
+The allocation and deallocation of organisms is static, with no runtime 
+overhead such as garbage collection.
+
+\begin{figure}[t]
+%\rule{8.5cm}{0.37pt}
+\begin{minipage}[t]{0.45\linewidth}
+{\small
+\begin{verbatim}
+C _on(), _off();
+
+class Blink with
+   var int led;
+   var int freq;
+do
+   loop do
+      _on(this.led);
+      await (this.freq)s;
+      _off(this.led);
+      await (this.freq/2)s;
+   end
+end
+
+var Blink b1;
+b1.led  = 0;
+b1.freq = 2;
+
+var Blink b2;
+b2.led  = 1;
+b2.freq = 4;
+
+await 1min;
+\end{verbatim}
+}
+\end{minipage}
+%
+\hspace{0.0cm}
+%
+\begin{minipage}[t]{0.45\linewidth}
+%\fbox{
+{\small
+\begin{verbatim}
+C _on(), _off();
+var Blink b1, b2;
+par/or do
+   b1.led  = 0;
+   b1.freq = 2;
+   b2.led  = 1;
+   b2.freq = 4;
+   await 1min;
+with
+   loop do
+      _on(b1.led);
+      await (b1.freq)s;
+      _off(b1.led);
+      await (b1.freq/2)s;
+   end
+   await FOREVER;
+with
+   loop do
+      _on(b2.led);
+      await (b2.freq)s;
+      _off(b2.led);
+      await (b2.freq/2)s;
+   end
+   await FOREVER;
+end
+\end{verbatim}
+%}
+}
+\end{minipage}
+\rule{8.5cm}{0.37pt}
+\caption{ ``Two blinking LEDs'' using organisms.
+\label{lst.orgs}
+}
+\end{figure}
+
+Figure~\ref{lst.srp} shows part of our port of the SRP routing 
+protocol~\cite{wsn.teps} to \CEU.
+The protocol specifies a fixed number of \emph{forwarders} responsible for 
+routing received messages to neighbours based on a static table.
+Given that a forwarder holds internal state (i.e. a message buffer and the 
+forwarding activity), we define a \code{Forwarder} class and create multiple 
+instances to serve requests.
+
+The first column of Figure~\ref{lst.srp} shows the receiving loop of the 
+protocol, which invokes \code{emit~go} when a message needs to be forwarded.
+The event is declared as global, so that \code{Forwarder} instances have access 
+to it.
+The forwarders are declared in a vector, creating \code{COUNT} different 
+instances.
+As the vector is local, all instances are automatically killed when the 
+protocol is stopped.
+(Note the use of the start/stop pattern of Figure~\ref{lst.radio} again.)
+
+The second column of Figure~\ref{lst.srp} shows the \code{Forwarder} class.
+Initially, all forwarders are in the same state, waiting for the global event 
+\code{go}.
+Once the receiving loop emits the event in the top-level body, the forwarders 
+awake in the order they were declared.
+The first forwarder atomically sets the \code{gotcha} variable, indicating that 
+the message will be handled and that other forwarders should ignore it:
+all other forwarders will await again for the next \code{go} emission.
+With this technique, we eliminated the need of an explicit queue.
+In the case that all forwarders become busy, the \code{go} emission will be 
+missed (with \code{gotcha=0}), acting just like a full queue.
+
+%begin{comment}
+Note that \CEU organisms are not global entities and do not use the heap for 
+memory.
+Instead, they are bounded to the scope they are declared, and all memory is 
+statically allocated, just like \CEU does for standard local variables.
+Also, when an organism goes out of scope, the same automatic bookkeeping of 
+\code{par/or} compositions holds, all internal trails are killed and 
+finalization blocks execute (if any).
+Hence, the ``garbage collection'' for both the memory and code in organisms is 
+efficient and static.
+Although \CEU does not support dynamic creation (which could lead do unbounded 
+memory), scoped organisms offer some degree of flexibility when compared to 
+systems providing global objects only~\cite{wsn.virgil,wsn.flowtalk}.
+%end{comment}
+
+% TODO: ND access
+
+\begin{figure}[t]
+%\rule{8.5cm}{0.37pt}
+\begin{minipage}[t]{0.45\linewidth}
+{\small
+\begin{verbatim}
+event _fwd_t go;
+loop do
+  await SRP_START;
+  par/or do
+    await SRP_STOP;
+  with
+    var Forwarder[COUNT] fwds;
+    <initialize fwds>
+    loop do
+      await SRP_RECEIVE;
+      <receive or forward>
+      if hops_left > 0 then
+        <prepare fwd>
+        emit go=&fwd;
+      end
+    end
+  end
+end
+\end{verbatim}
+}
+\end{minipage}
+%
+\hspace{0.0cm}
+%
+\begin{minipage}[t]{0.45\linewidth}
+%\fbox{
+{\small
+\begin{verbatim}
+class Forwarder with
+  <...>
+do
+  loop do
+    fwd = await global:go;
+    if fwd:gotcha then
+      continue;
+    end
+    fwd:gotcha = 1;
+    <send message>
+    <...>
+  end
+end
+\end{verbatim}
+%}
+}
+\end{minipage}
+\rule{8.5cm}{0.37pt}
+\caption{ SRP forwarders as organisms.
+\label{lst.srp}
+}
+\end{figure}
+
+%begin{comment}
+Objects
+    - each method is a global function receiving a different object to 
+      manipulate
+    - global (usually heap)
+    - garbage collected or global
+
+Organisms
+    - mutual reactivity
+    - scoped / local
+    - O(1) GC
+
+- nesting
+    - data
+    - events
+    - listeners
+    - compositions
+
+- both have an interface
+- fields / methods
+
+- fields / internal events
+- public fields are ok because reliable shared memory
+
+- no recursive definitions
+- but we have interfaces
+- special global interface
+%end{comment}
+
+\begin{table}[t]
+\begin{center}
+\begin{tabular}{ | c || c || c | c || c | c | }
+\hline
+            & send  & per1 & dur1 &  per2 & dur2  \\ \hline
+    Test 1  & 200ms &  5ms & 1ms  &  50ms &  5ms  \\ \hline
+    Test 2  & 200ms &  5ms & 2ms  &  50ms & 10ms  \\ \hline
+    Test 3  & 200ms & 10ms & 5ms  & 100ms & 50ms  \\ \hline
+\hline
+    Test 4  & 100ms &  5ms & 1ms  &  50ms &  5ms  \\ \hline
+    Test 5  & 100ms &  5ms & 2ms  &  50ms & 10ms  \\ \hline
+    Test 6  & 100ms & 10ms & 5ms  & 100ms & 50ms  \\ \hline
+
+\end{tabular}
+\caption{Test parameters for the radio performance.}
+\label{tab:comparison}
+\end{center}
+\end{table}
+
+We adjusted the parameters to identify two situations of interest:
+
+\emph{Scenario 1}: the limit in which both implementations receive all messages 
+and perform equally in the activities.
+\emph{Scenario 2}: the limit in which the \CEU implementation starts to loose 
+packets.
+
+Then we ... for more stress test
+\emph{Scenario 3}: doubling the sending frequency from the previous scenario
+5 motes
+
+Table~\ref{tab.radio} shows the chosen parameters for the three scenarios and 
+Figure~\ref{fig.radio1}
+
+As Figure~\ref{fig.radio1} shows, in \emph{Scenario 1} both implementations 
+perform equally, without packet losses and completing the activities the same 
+number of times.
+\emph{Scenario 2}.
+
+\begin{enumerate}
+\item send=100ms, act1=75ms/dur1=1ms, act2=180ms/dur2=3ms
+\item send=100ms, act1=45ms/dur1=1ms, act2= 90ms/dur2=3ms
+\item send= 50ms, act1=45ms/dur1=1ms, act2= 90ms/dur2=3ms
+\end{enumerate}
+
+We introduce the term byte time to refer to the duration
+that it takes to transmit a single byte of data over the radio.
+On the Mica2, a byte time is 0.42 ms.
+For the largest possible packet size using TinySec-
+AE, a maximum of 10 block cipher operations are required,
+hence the block cipher must take no more than 28/10 = 2.8
+byte times per operation.
+===> 2.8 * 0.42 = 1.176
+Cipher \&
+Impl.
+RC5 (C) Skipjack (C) RC5 (C, assembly)
+Time (ms)
+0.90    0.38         0.26
+Time (byte times)
+2.2     0.9          0.6
+
+% TODO
+SRP rate
+CTP rate:
+
+DRIP sample rate=
+    Trickle rate= 1 -> 1024
+
+CTP RT: beacon 128->512k ms
+        size=5bytes
+CTP FW: 32ms + recv rate
+        size=8bytes + data
+
+TestNetwork
+        snd interval = 8192
+
+all use random deltas to avoid XXX
+
+As more specific contributions, we enumerate the following features:
+\begin{itemize}
+\item A compile-time analysis for reliable shared-memory concurrency.
+\item A finalization mechanism to safely release resources just before they go 
+      out of scope.
+\item First-class timers with a predictable behavior.
+\item Stack-based inter-thread communication, which provides a restricted (but 
+      safer) form of subroutines.
+      % and can be used to handle exceptions.
+%\item An object system that provides code reentrancy and enables the creation 
+%of higher-level abstractions.
+\end{itemize}
+
+\CEU is based on Esterel~\cite{esterel.ieee91} and follows a synchronous 
+execution model~\cite{rp.twelve}, which enforces a disciplined step-by-step 
+execution.
+\CEU relies on a compile-time analysis to detect unbounded loops and concurrent 
+access to variables.
+
+Our design is first compromised with the main principles that govern WSNs 
+development: \emph{resource minimization} and \emph{bug prevention}, as defined 
+by Levis~\cite{wsn.decade}.
+That said, the support for hierarchical compositions, together with a 
+convenient syntax for timers and internal communication also lead to more 
+compact programs (up to 70\% reduction, in our evaluation).
+
+TODO
+
+SAFETY, both react to time, what if they access memory, who executes first
+CEU detects at compile time and raises a warning
+
+Node-system-imperative
+    - not macro
+    - not declarative
+    - drivers, protocols, control-intensive apps
+
+Synchronous
+    - not preemptive, actors
+
+ED->MT->HC
+
+Safety and expressiveness co-design
+
+abstractions need to be first class
+
+However, without architectural changes, we could not express XXX how.
+more lines, more ROM
+    - not always represent the Céu way
+        - full DRIP 40%
+
+and is used  works (e.g. \cite{wsn.protothreads,wsn.sol,wsn.flask}) already 
+        include comparisons to nesc, allowing (at least) an indirect comparison 
+of \CEU{} with them.
+
+\footnote {
+    We used $TinyOS-2.1.1$ and $micaz$ motes, and the sample applications found 
+in \code{/opt/tinyos-2.1.1/apps/}.
+}
+
+Research in Wireless Sensor Networks continuously pursues ways to reduce 
+programming efforts without introducing significant resource overheads.
+%Multi-threaded and synchronous languages offer proper support for sequential 
+%programming, overcoming the difficulties of (still prevailing) event-driven 
+%development.
+However, most analysis and mitigation efforts regarding safety threats in 
+control and concurrency are still delegated to programmers (e.g.  handling 
+synchronization and shared-memory among activities).
+
+We present a system language design that prioritizes safe concurrency and 
+enforces handling threats at compile time, rather than providing runtime 
+mechanisms only.
+%Our design supports concurrent lines of execution that run in time steps and 
+%are allowed to share variables.
+On the one hand, the synchronous and static foundation of our design imposes 
+limitations on its expressiveness, such as for implementing
+computation-intensive operations and ensuring hard real-time responsiveness.
+On the other hand, the simpler reasoning about concurrency enables a 
+compile-time analysis that ensures deterministic and memory-safe programs.
+%, even in the presence of pointers and low-level system calls.
+%
+We show that the achieved expressiveness and responsiveness is sufficient to 
+implement a selected number of standardized network protocols and a radio 
+driver, reducing considerably the code complexity, and with a increase in 
+memory below 10\% in terms of total ROM and RAM.
+%(measured in number of tokens)
+
+Control-intensive applications benefit from the former, while
+with a low synchronization rate or for those
+safe and automatic synchronization at the cost of manually ensuring 
+responsiveness;
+while XXX benefit from predictable responsiveness at the cost of manual
+synchronization.
+more from the first option, while computational-intensive applications that 
+hardly synchronize
+while for computational-intensive which hardly needs synchronization
+On the one hand, the default behavior of activities being independent hinders 
+the development of highly synchronized applications, requiring manual 
+synchronization
+
+%
+A possible scenario is to have a high priority thread in \CEU for the overall 
+control of the application, which communicates asynchronously via external 
+events with low-priority threads that execute heavy tasks.
+A similar scenario has already been proposed~\cite{wsn.tosthreads}.
+
+%Even though \CEU ensures bounded execution for reactions, it cannot provide 
+%hard real-time guarantees.
+
+Finally, \CEU was designed for control and that analysis that refuses tight 
+loops FROM ERROS at compile time (as discussed in Section~\ref{sec.ceu.det}).
+above the 8-ms boundary is
+
+% TODO
+%Nevertheless, \CEU does not renounce to practical aspects, providing seamless 
+%integration with $C$ for low-level manipulation
+%
+%With a good balance between low-level and high-level functionality, \CEU{} 
+%fits the constrained requirements of embedded systems.
+
+FIM:
+% results indicate a good design, features "se encaixam", no bloat
+%We conclude that local scopes are currently more important as a programming 
+%XXX than to actually a mechanism to reuse memory.
+%we checked, all in parallel
+%Similar results from evaluations in related work~\cite{wsn.ocram,wsn.sol}
+% nesC uses less RAM than \emph{all}.
+
+% two apps in sequence
+
+manual verification of timing constraints
+in opposition to
+manual sync
+
+resource efficiency and
+easy of programming
+not relevant
+if .
+
+% reproducibility, does not depend on the platform
+
 \end{comment}
+
+\section{Acknowledgments}
 
 \balance
 %{\footnotesize
