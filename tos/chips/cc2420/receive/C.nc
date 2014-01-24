@@ -35,6 +35,20 @@ implementation {
     // 32000x  per 1000ms
     //   320x  per   10ms
 
+    // BATTERY
+/*
+    #define CRYPT
+    #define DT_SEND     2000    // 2000ms -> 100000 ms (all 100 msgs)
+    #define DT_BUSY     2000    //    2ms
+*/
+
+    // BATTERY
+    #define DT_SEND    2000    // 2000ms -> 200000 ms (all 100 msgs)
+    #define DT_PERIOD  1500    //   50ms ->    XX times
+    #define DT_BUSY       1    //    1ms
+/*
+*/
+
 /*
     #define CRYPT
     #define DT_SEND      600    // 600ms -> 60000 ms (all 100 msgs)
@@ -180,7 +194,7 @@ implementation {
         if (err == SUCCESS) {
             if (TOS_NODE_ID == 1) {
                 c_send = MSGS;
-                call MilliTimer.startOneShot(DT_SEND*MSGS);
+                call MilliTimer.startOneShot((uint32_t)DT_SEND*MSGS);
             } else {
                 call MilliTimer.startPeriodic(DT_SEND);
             }
