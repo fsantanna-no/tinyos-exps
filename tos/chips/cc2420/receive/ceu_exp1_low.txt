@@ -1,0 +1,40 @@
+/*
+    #define DT_SEND     150    // 150ms -> 15000 ms (all 100 msgs)
+    #define DT_PERIOD  4160    // 140ms ->    XX times
+    #define DT_BUSY       0    //   0ms
+    // ORIG: 979 // 115
+    // CEUS: 953 // 115
+*/
+
+Simulated time: 221184000 cycles
+Time for simulation: 71.821 seconds
+Total throughput: 33.87622 mhz
+Throughput per node: 3.0796564 mhz
+
+=={ Packet monitor results }==================================================
+Node     sent (b/p)          recv (b/p)    corrupted (b)
+------------------------------------------------------------------------------
+   0      3900 / 100          28180 / 713           2422
+   1         0 / 0            32202 / 813           3143
+   2      3900 / 100          28217 / 713           2571
+
+=={ Energy consumption results for node 0 }===================================
+Node lifetime: 221184000 cycles,  30.0 seconds
+
+CPU: 0.31849235014917 Joule
+   Active: 0.031524064965128586 Joule, 10238749 cycles
+   Idle: 0.2869682851840414 Joule, 210945251 cycles
+
+=={ Energy consumption results for node 1 }===================================
+Node lifetime: 221184000 cycles,  30.0 seconds
+
+CPU: 0.31490799373803713 Joule
+   Active: 0.025102284017049156 Joule, 8153009 cycles
+   Idle: 0.28980570972098796 Joule, 213030991 cycles
+
+=={ Energy consumption results for node 2 }===================================
+Node lifetime: 221184000 cycles,  30.0 seconds
+
+CPU: 0.3184355655600586 Joule
+   Active: 0.031422328934814454 Joule, 10205706 cycles
+   Idle: 0.28701323662524414 Joule, 210978294 cycles

@@ -1,0 +1,40 @@
+/*
+    #define CRYPT
+    #define DT_SEND      600    // 600ms -> 60000 ms (all 100 msgs)
+    #define DT_BUSY     8000    //   8ms
+    // ORIG: 1000
+    // CEUS: 1000
+*/
+
+Simulated time: 221184000 cycles
+Time for simulation: 97.618 seconds
+Total throughput: 24.923927 mhz
+Throughput per node: 2.2658117 mhz
+
+=={ Packet monitor results }==================================================
+Node     sent (b/p)          recv (b/p)    corrupted (b)
+------------------------------------------------------------------------------
+   0      1911 / 49           13952 / 353           1192
+   1         0 / 0            15910 / 402           1499
+   2      1911 / 49           13954 / 353           1168
+
+=={ Energy consumption results for node 0 }===================================
+Node lifetime: 221184000 cycles,  30.0 seconds
+
+CPU: 0.3164220558293457 Joule
+   Active: 0.027814897936238606 Joule, 9034043 cycles
+   Idle: 0.2886071578931071 Joule, 212149957 cycles
+
+=={ Energy consumption results for node 1 }===================================
+Node lifetime: 221184000 cycles,  30.0 seconds
+
+CPU: 0.6809954024855958 Joule
+   Active: 0.6809893881914469 Joule, 221179579 cycles
+   Idle: 6.0142941487630205E-6 Joule, 4421 cycles
+
+=={ Energy consumption results for node 2 }===================================
+Node lifetime: 221184000 cycles,  30.0 seconds
+
+CPU: 0.31640298900683594 Joule
+   Active: 0.027780737561686197 Joule, 9022948 cycles
+   Idle: 0.28862225144514975 Joule, 212161052 cycles
